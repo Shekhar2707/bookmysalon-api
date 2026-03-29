@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BookMySalon - Instant Salon Booking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-gray-900 text-white">
+    <!-- Navigation -->
+    <nav class="bg-gray-800 shadow-lg">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <div class="w-10 h-10 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center">
+                    <span class="text-white font-bold">✂️</span>
+                </div>
+                <h1 class="text-2xl font-bold">BookMySalon</h1>
+            </div>
+            <div class="flex gap-4 items-center">
+                <button onclick="scrollToSection('features')" class="hover:text-pink-400 transition">Features</button>
+                <button onclick="scrollToSection('cta')" class="hover:text-pink-400 transition">Get Started</button>
+                <a href="register.html" class="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-2 px-4 rounded-full text-sm transition transform hover:scale-105">
+                    🏪 Register Salon
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="bg-gradient-to-b from-gray-900 to-gray-800 min-h-screen flex items-center justify-center px-4">
+        <div class="max-w-4xl mx-auto text-center">
+            <!-- Logo -->
+            <div class="mb-8">
+                <div class="w-24 h-24 mx-auto bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center shadow-2xl">
+                    <span class="text-5xl">✂️</span>
+                </div>
+            </div>
+
+            <!-- Title & Tagline -->
+            <h1 class="text-5xl md:text-6xl font-bold mb-4">BookMySalon</h1>
+            <p class="text-2xl text-gray-300 mb-8">Instant Salon Booking</p>
+            <p class="text-lg text-gray-400 mb-12 max-w-2xl mx-auto">
+                Scan a QR code inside any salon and book your appointment instantly. No waiting, no calls. Just quick and easy booking.
+            </p>
+
+            <!-- CTA Buttons -->
+            <div class="flex flex-col md:flex-row gap-4 justify-center mb-12">
+                <button onclick="goToNearby()" class="bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-bold py-4 px-8 rounded-full text-lg transition transform hover:scale-105 shadow-lg">
+                    📍 Find Nearby Salons
+                </button>
+                <button onclick="openQRScanner()" class="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-bold py-4 px-8 rounded-full text-lg transition transform hover:scale-105 shadow-lg">
+                    📱 Scan Salon QR
+                </button>
+                <button onclick="goToBooking()" class="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-4 px-8 rounded-full text-lg transition transform hover:scale-105 shadow-lg">
+                    ✅ Book Appointment
+                </button>
+            </div>
+
+            <!-- Salon Owner CTA -->
+            <div class="border border-white/20 rounded-2xl bg-white/5 p-6 max-w-xl mx-auto">
+                <p class="text-gray-300 mb-3 text-sm">Salon owner ho? Apna salon register karo aur customers se instant bookings pao.</p>
+                <a href="register.html" class="inline-block bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-3 px-8 rounded-full text-lg transition transform hover:scale-105 shadow-lg">
+                    🏪 Register Your Salon — Free
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-20 px-4 bg-gray-800">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-4xl font-bold text-center mb-16">How It Works</h2>
+            
+            <div class="grid md:grid-cols-4 gap-6 mb-12">
+                <!-- Step 1 -->
+                <div class="bg-white rounded-2xl shadow-lg p-8 text-gray-900 text-center hover:shadow-2xl transition">
+                    <div class="w-16 h-16 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4 text-white text-2xl">
+                        1️⃣
+                    </div>
+                    <h3 class="text-xl font-bold mb-3">Scan QR Code</h3>
+                    <p class="text-gray-600">Point your phone at the QR code inside the salon</p>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="bg-white rounded-2xl shadow-lg p-8 text-gray-900 text-center hover:shadow-2xl transition">
+                    <div class="w-16 h-16 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4 text-white text-2xl">
+                        2️⃣
+                    </div>
+                    <h3 class="text-xl font-bold mb-3">Choose Service</h3>
+                    <p class="text-gray-600">Select from available services like haircut, beard trim, etc.</p>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="bg-white rounded-2xl shadow-lg p-8 text-gray-900 text-center hover:shadow-2xl transition">
+                    <div class="w-16 h-16 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4 text-white text-2xl">
+                        3️⃣
+                    </div>
+                    <h3 class="text-xl font-bold mb-3">Select Time Slot</h3>
+                    <p class="text-gray-600">Pick your preferred time from available slots</p>
+                </div>
+
+                <!-- Step 4 -->
+                <div class="bg-white rounded-2xl shadow-lg p-8 text-gray-900 text-center hover:shadow-2xl transition">
+                    <div class="w-16 h-16 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4 text-white text-2xl">
+                        4️⃣
+                    </div>
+                    <h3 class="text-xl font-bold mb-3">Confirm Booking</h3>
+                    <p class="text-gray-600">Get instant confirmation on WhatsApp</p>
+                </div>
+            </div>
+
+            <!-- Benefits -->
+            <div class="grid md:grid-cols-3 gap-6">
+                <div class="bg-gray-700 rounded-2xl p-8 border border-gray-600">
+                    <h4 class="text-xl font-bold mb-3">⚡ Instant</h4>
+                    <p class="text-gray-300">Book your appointment in seconds</p>
+                </div>
+                <div class="bg-gray-700 rounded-2xl p-8 border border-gray-600">
+                    <h4 class="text-xl font-bold mb-3">🔒 Secure</h4>
+                    <p class="text-gray-300">Your data is safe and encrypted</p>
+                </div>
+                <div class="bg-gray-700 rounded-2xl p-8 border border-gray-600">
+                    <h4 class="text-xl font-bold mb-3">📱 Easy to Use</h4>
+                    <p class="text-gray-300">Mobile-first design for all devices</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section id="cta" class="py-20 px-4 bg-gradient-to-r from-pink-600 to-purple-600">
+        <div class="max-w-4xl mx-auto text-center">
+            <h2 class="text-4xl font-bold mb-6">Ready to Book Your Next Salon Visit?</h2>
+            <p class="text-xl text-gray-100 mb-8">Scan a QR code or find nearby salons now</p>
+            <div class="flex flex-col md:flex-row gap-4 justify-center">
+                <button onclick="openQRScanner()" class="bg-white text-purple-600 hover:bg-gray-100 font-bold py-4 px-8 rounded-full text-lg transition transform hover:scale-105">
+                    📱 Scan QR Code
+                </button>
+                <button onclick="goToNearby()" class="bg-purple-800 hover:bg-purple-900 text-white font-bold py-4 px-8 rounded-full text-lg transition transform hover:scale-105">
+                    📍 Find Salons
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 py-8 px-4 border-t border-gray-700">
+        <div class="max-w-6xl mx-auto text-center text-gray-400">
+            <p>&copy; 2024 BookMySalon. All rights reserved.</p>
+            <p class="mt-2">Making salon booking instant and easy 💇‍♀️</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

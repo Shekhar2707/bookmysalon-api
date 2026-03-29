@@ -1,0 +1,162 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BookMySalon - Salon Registration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-gray-950 text-white" style="font-family: Manrope, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+    <div class="fixed inset-0 -z-10 overflow-hidden">
+        <div class="absolute -top-32 -left-20 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl"></div>
+        <div class="absolute top-20 right-0 h-96 w-96 rounded-full bg-amber-400/15 blur-3xl"></div>
+        <div class="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-pink-500/15 blur-3xl"></div>
+    </div>
+
+    <header class="sticky top-0 z-40 border-b border-white/10 bg-gray-950/75 backdrop-blur-xl">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+            <button onclick="window.location.href='index.html'" class="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold hover:border-pink-400/70 hover:text-pink-300 transition">
+                ← Back to Home
+            </button>
+            <h1 class="text-lg md:text-xl font-extrabold tracking-wide">Salon Partner Onboarding</h1>
+            <a href="salons.html" class="text-xs md:text-sm font-semibold text-cyan-300 hover:text-cyan-200 transition">View Live Salons</a>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-8 md:py-10">
+        <section class="grid lg:grid-cols-[1.1fr_0.9fr] gap-8 items-start">
+            <div class="rounded-3xl border border-white/10 bg-gradient-to-br from-gray-900/95 via-gray-900/90 to-gray-800/80 shadow-2xl p-5 md:p-8">
+                <div class="flex flex-wrap items-center gap-3 mb-5">
+                    <span class="rounded-full bg-cyan-400/20 text-cyan-200 px-3 py-1 text-xs font-bold tracking-wide">FAST SETUP</span>
+                    <span class="rounded-full bg-amber-400/20 text-amber-200 px-3 py-1 text-xs font-bold tracking-wide">NO APP REQUIRED</span>
+                    <span class="rounded-full bg-pink-500/20 text-pink-200 px-3 py-1 text-xs font-bold tracking-wide">WHATSAPP READY</span>
+                </div>
+
+                <h2 class="text-3xl md:text-4xl font-extrabold leading-tight mb-2">Register your salon in <span class="text-cyan-300">under 2 minutes</span></h2>
+                <p class="text-sm md:text-base text-gray-300 mb-7">Get your instant booking link and start receiving customer appointments on WhatsApp.</p>
+
+                <form id="registrationForm" onsubmit="handleSalonRegistrationSubmit(event)" class="space-y-5">
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-semibold mb-2 text-gray-200">Salon Name *</label>
+                            <input type="text" id="salonName" placeholder="Premium Cuts Studio" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" required />
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-semibold mb-2 text-gray-200">Owner Name *</label>
+                            <input type="text" id="ownerName" placeholder="Ganesh Sharma" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" required />
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-semibold mb-2 text-gray-200">Email *</label>
+                            <input type="email" id="email" placeholder="salon@example.com" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" required />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold mb-2 text-gray-200">Quick Location (Optional)</label>
+                        <button type="button" onclick="requestRegistrationLocation()" class="w-full rounded-xl border border-cyan-400/40 bg-cyan-500/15 px-4 py-3 font-bold text-cyan-100 hover:bg-cyan-500/25 transition">
+                            📍 Use My Current Location
+                        </button>
+                        <p id="locationStatus" class="mt-2 text-xs text-gray-400">Tip: location auto-fills address, city, state and pincode.</p>
+                        <div class="mt-3 rounded-xl border border-amber-300/20 bg-amber-400/10 p-3 text-xs text-amber-100">
+                            <p class="font-bold mb-1">Hint:</p>
+                            <p>Location allow करें, फिर 3-5 सेकंड रुकें. Fields auto-fill हो जाएंगे.</p>
+                        </div>
+                    </div>
+
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-semibold mb-2 text-gray-200">Address</label>
+                            <input type="text" id="address" placeholder="Shop no, area, landmark" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-2 text-gray-200">City *</label>
+                            <input type="text" id="city" placeholder="Pune" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" required />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-2 text-gray-200">State *</label>
+                            <input type="text" id="state" placeholder="Maharashtra" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" required />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-2 text-gray-200">Pincode</label>
+                            <input type="text" id="pincode" maxlength="6" placeholder="411001" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-2 text-gray-200">WhatsApp Number *</label>
+                            <div class="flex rounded-xl overflow-hidden border border-white/10 focus-within:ring-2 focus-within:ring-cyan-400">
+                                <span class="bg-white/10 px-4 py-3 font-bold text-gray-200">+91</span>
+                                <input type="text" id="whatsappNumber" placeholder="9876543210" maxlength="10" class="w-full bg-white/5 px-4 py-3 text-white placeholder-gray-400 focus:outline-none" required />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold mb-3 text-gray-200">Top Services (Optional)</label>
+                        <div class="grid sm:grid-cols-2 gap-2 text-sm">
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" value="Haircut">Haircut</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" value="Beard Trim">Beard Trim</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" value="Hair Spa">Hair Spa</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" value="Facial">Facial</label>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="registerBtn" class="w-full rounded-xl bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 px-5 py-4 text-lg font-extrabold tracking-wide text-white shadow-xl hover:shadow-pink-500/25 transition-transform hover:scale-[1.01]">
+                        🚀 Register Salon & Get Booking Link
+                    </button>
+                </form>
+            </div>
+
+            <aside class="space-y-5">
+                <div class="rounded-3xl border border-white/10 bg-white/5 p-5 md:p-6">
+                    <h3 class="text-xl font-extrabold mb-4">What you get instantly</h3>
+                    <ul class="space-y-3 text-sm text-gray-200">
+                        <li class="rounded-xl bg-black/20 p-3 border border-white/10">✅ Unique salon booking link</li>
+                        <li class="rounded-xl bg-black/20 p-3 border border-white/10">✅ WhatsApp lead verification flow</li>
+                        <li class="rounded-xl bg-black/20 p-3 border border-white/10">✅ Ready-to-share customer URL</li>
+                        <li class="rounded-xl bg-black/20 p-3 border border-white/10">✅ Fast onboarding in one screen</li>
+                    </ul>
+                </div>
+
+                <div id="whatsappVerifyCard" class="hidden rounded-3xl border border-emerald-300/20 bg-gradient-to-br from-emerald-500/25 via-teal-500/15 to-cyan-500/20 p-5 md:p-6">
+                    <h3 class="text-2xl font-extrabold mb-4">✅ Salon Registered</h3>
+
+                    <div class="rounded-xl border border-white/20 bg-white/10 p-4 mb-4 text-sm text-emerald-50">
+                        <p class="font-bold mb-2">✅ 2 Steps में Done:</p>
+                        <p>1️⃣ नीचे <strong>"Verify on WhatsApp"</strong> button दबाओ — WhatsApp खुलेगा।</p>
+                        <p>2️⃣ जो message आए वो <strong>Send</strong> कर दो BookMySalon को।</p>
+                        <p class="mt-2 text-emerald-300">📲 Automatic Welcome message + QR code तुम्हें वापस मिलेगा!</p>
+                    </div>
+
+                    <div class="rounded-xl border border-white/20 bg-white/90 text-gray-900 p-4 mb-4">
+                        <p class="text-xs text-gray-600 mb-1">Salon ID (Unique)</p>
+                        <p id="verifyCodeDisplay" class="text-2xl font-extrabold tracking-wide text-pink-600">SALON-XXXXX</p>
+                    </div>
+
+                    <a id="whatsappVerifyLink" href="#" onclick="openWhatsAppVerify(event)" class="block rounded-xl bg-emerald-500 hover:bg-emerald-600 px-4 py-3 text-center font-bold text-white transition mb-3">
+                        💬 Verify on WhatsApp
+                    </a>
+
+                    <a id="dashboardBtn" href="#" onclick="goToDashboard(event)" class="block rounded-xl bg-cyan-500 hover:bg-cyan-600 px-4 py-3 text-center font-bold text-white transition mb-4">
+                        📊 Open My Dashboard →
+                    </a>
+
+                    <div class="rounded-xl border border-emerald-300/30 bg-emerald-500/10 text-emerald-100 p-4">
+                        <p class="text-xs font-bold mb-2">✨ Welcome Message</p>
+                        <p class="text-sm mb-3">Message: "Hi, verify my salon <span id="salonIdForMessage" class="font-bold text-emerald-300">SALON-XXXXX (OWNER)</span>"</p>
+                        <p class="text-xs">Message send करो → BookMySalon automatically तुम्हें Welcome message + QR भेजेगा। QR print करके salon में लगाओ।</p>
+                    </div>
+                </div>
+            </aside>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
+

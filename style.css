@@ -1,0 +1,134 @@
+/* Custom Animations and Styles */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    scroll-behavior: smooth;
+}
+
+/* Selection Highlight */
+.selected {
+    background-color: #ec4899 !important;
+    color: white !important;
+    box-shadow: 0 0 20px rgba(236, 72, 153, 0.5) !important;
+}
+
+/* Service Card Selection */
+.service-card {
+    transition: all 0.3s ease;
+    border: 3px solid transparent;
+}
+
+.service-card:hover {
+    border-color: #ec4899;
+}
+
+.service-card.selected {
+    background: linear-gradient(135deg, #fce7f3, #f3e8ff) !important;
+    border-color: #ec4899 !important;
+    box-shadow: 0 10px 30px rgba(236, 72, 153, 0.3) !important;
+}
+
+/* Time Slot Selection */
+.time-slot {
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.time-slot:hover {
+    transform: translateY(-2px);
+}
+
+.time-slot.selected {
+    background: linear-gradient(135deg, #ec4899, #f472b6) !important;
+    color: white !important;
+    border-color: #be185d !important;
+}
+
+/* Buttons */
+button {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+button:active {
+    transform: scale(0.98);
+}
+
+/* Loading Animation */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.loading {
+    animation: pulse 1.5s infinite;
+}
+
+/* Gradient Text */
+.gradient-text {
+    background: linear-gradient(135deg, #ec4899, #a855f7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* Smooth Scrolling for Navigation */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    body {
+        font-size: 16px;
+    }
+    
+    h1 {
+        font-size: 1.75rem;
+    }
+    
+    h2 {
+        font-size: 1.5rem;
+    }
+    
+    button {
+        min-height: 48px;
+        min-width: 48px;
+    }
+}
+
+/* Focus States for Accessibility */
+button:focus,
+input:focus {
+    outline: 2px solid #ec4899;
+    outline-offset: 2px;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1f2937;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #ec4899;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #db2777;
+}
