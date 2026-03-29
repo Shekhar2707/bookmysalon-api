@@ -15,7 +15,7 @@
                 ← Back
             </button>
             <h1 class="text-2xl font-bold">BookMySalon</h1>
-            <div class="w-8"></div>
+            <a href="faq.html" class="text-sm text-cyan-300 hover:text-cyan-200 transition">FAQ</a>
         </div>
     </header>
 
@@ -31,7 +31,7 @@
                     </div>
                 </div>
                 <div class="text-right">
-                    <p class="text-sm text-gray-600">Salon ID</p>
+                    <p id="salonIdLabel" class="text-sm text-gray-600">Salon ID</p>
                     <p id="salonId" class="text-2xl font-bold">4582</p>
                 </div>
             </div>
@@ -43,7 +43,7 @@
                 <div>
                     <p class="text-gray-600">📞 WhatsApp</p>
                     <p id="salonPhone" class="font-semibold text-gray-500">—</p>
-                    <a id="salonWhatsApp" href="#" target="_blank" class="text-green-600 text-sm font-semibold hover:underline hidden">💬 Message Salon</a>
+                    <a id="salonWhatsApp" href="#" target="_blank" rel="noopener noreferrer" class="text-green-600 text-sm font-semibold hover:underline hidden">💬 Message Salon</a>
                 </div>
                 <div>
                     <p class="text-gray-600">⏰ Hours</p>
@@ -57,44 +57,7 @@
             <!-- Services Section -->
             <div>
                 <h3 class="text-2xl font-bold mb-6">Select Service</h3>
-                <div id="servicesContainer" class="space-y-4">
-                    <!-- Services will be added by JavaScript -->
-                    <div class="bg-white rounded-2xl shadow-lg p-6 text-gray-900 cursor-pointer hover:shadow-xl transition service-card" onclick="selectService(this, 'Haircut', 0)">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <h4 class="text-xl font-bold">Haircut</h4>
-                                <p class="text-gray-600">Professional haircut</p>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-sm text-gray-500">~30 min</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="bg-white rounded-2xl shadow-lg p-6 text-gray-900 cursor-pointer hover:shadow-xl transition service-card" onclick="selectService(this, 'Beard Trim', 0)">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <h4 class="text-xl font-bold">Beard Trim</h4>
-                                <p class="text-gray-600">Beard grooming & shaping</p>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-sm text-gray-500">~20 min</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="bg-white rounded-2xl shadow-lg p-6 text-gray-900 cursor-pointer hover:shadow-xl transition service-card" onclick="selectService(this, 'Haircut + Beard', 0)">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <h4 class="text-xl font-bold">Haircut + Beard</h4>
-                                <p class="text-gray-600">Complete grooming package</p>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-sm text-gray-500">~50 min</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <div id="servicesContainer" class="space-y-4"></div>
             </div>
 
             <!-- Time Slot Section -->
@@ -105,6 +68,13 @@
                 <div class="mb-8">
                     <label class="block text-sm font-semibold mb-3">Choose Date</label>
                     <input type="date" id="bookingDate" class="w-full bg-white text-gray-900 rounded-lg p-3 font-semibold" />
+                </div>
+
+                <div class="mb-8">
+                    <label class="block text-sm font-semibold mb-3">Choose Karigar</label>
+                    <select id="karigarFilter" class="w-full bg-white text-gray-900 rounded-lg p-3 font-semibold">
+                        <option value="ANY">Any Karigar</option>
+                    </select>
                 </div>
 
                 <!-- Time Slots -->
@@ -130,9 +100,6 @@
                 <div class="flex justify-between">
                     <span class="text-gray-600">Time:</span>
                     <span id="summaryTime" class="font-semibold">Not selected</span>
-                </div>
-                <div class="hidden">
-                    <span id="summaryPrice"></span>
                 </div>
             </div>
 
@@ -201,10 +168,127 @@
         var params = new URLSearchParams(window.location.search);
         var SALON_ID = (params.get('id') || '').toUpperCase();
         var currentSalonName = 'Salon';
+        var currentBusinessType = 'salon';
+        var currentBusinessLabel = 'Salon';
         var currentDate = new Date().toISOString().split('T')[0];
         var currentSubscriptionActive = true;
         var selectedStars = 0;
         var lastBookedPhone = '';
+        var currentSlotState = null;
+        var selectedServices = [];
+        var selectedKarigarId = 'ANY';
+        var selectedSlot = null;
+
+        function parseTimeToMin(value) {
+            if (!value) return null;
+            var p = String(value).split(':').map(Number);
+            if (p.length < 2 || Number.isNaN(p[0]) || Number.isNaN(p[1])) return null;
+            return p[0] * 60 + p[1];
+        }
+
+        function toTime(mins) {
+            var h = String(Math.floor(mins / 60)).padStart(2, '0');
+            var m = String(mins % 60).padStart(2, '0');
+            return h + ':' + m;
+        }
+
+        function formatDuration(mins) {
+            if (mins < 60) return mins + ' min';
+            var h = Math.floor(mins / 60);
+            var m = mins % 60;
+            return m ? (h + ' hr ' + m + ' min') : (h + ' hr');
+        }
+
+        function normalizeServiceItem(item) {
+            if (typeof item === 'string') return { name: item, durationMin: 30 };
+            return {
+                name: String(item && item.name ? item.name : '').trim(),
+                durationMin: Math.max(5, Math.min(240, parseInt(item && item.durationMin, 10) || 30))
+            };
+        }
+
+        function getSelectedDurationMin() {
+            return selectedServices.reduce(function(sum, item) { return sum + item.durationMin; }, 0);
+        }
+
+        function updateSelectedServiceSummary() {
+            selectedService = selectedServices.map(function(item) { return item.name; }).join(', ');
+            if (!selectedService) selectedService = null;
+            if (typeof updateSummary === 'function') updateSummary();
+        }
+
+        function clearSelectedSlot() {
+            selectedSlot = null;
+            selectedTime = null;
+            var summaryTime = document.getElementById('summaryTime');
+            if (summaryTime) summaryTime.textContent = 'Not selected';
+            document.querySelectorAll('.time-slot').forEach(function(slot) {
+                slot.classList.remove('selected', 'ring-2', 'ring-pink-400');
+            });
+        }
+
+        window.toggleServiceCard = function(element) {
+            var name = element.getAttribute('data-service') || '';
+            var durationMin = Math.max(5, Math.min(240, parseInt(element.getAttribute('data-duration') || '30', 10) || 30));
+            var existingIndex = selectedServices.findIndex(function(item) { return item.name === name; });
+            if (existingIndex >= 0) {
+                selectedServices.splice(existingIndex, 1);
+                element.classList.remove('selected', 'ring-2', 'ring-pink-400');
+            } else {
+                selectedServices.push({ name: name, durationMin: durationMin });
+                element.classList.add('selected', 'ring-2', 'ring-pink-400');
+            }
+            updateSelectedServiceSummary();
+            clearSelectedSlot();
+            if (currentSlotState) renderSlots(currentSlotState);
+        };
+
+        function renderServiceCards(services) {
+            var container = document.getElementById('servicesContainer');
+            if (!container) return;
+            var normalized = Array.isArray(services) ? services.map(normalizeServiceItem).filter(function(item) { return item.name; }) : [];
+            if (!normalized.length) {
+                normalized = [
+                    { name: 'Haircut', durationMin: 30 },
+                    { name: 'Beard Trim', durationMin: 20 },
+                    { name: 'Facial', durationMin: 60 },
+                    { name: 'Hair Spa', durationMin: 45 }
+                ];
+            }
+            selectedServices = [];
+            selectedService = null;
+            container.innerHTML = normalized.map(function(item) {
+                var safeName = item.name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+                return '<div class="bg-white rounded-2xl shadow-lg p-6 text-gray-900 cursor-pointer hover:shadow-xl transition service-card" data-service="' + safeName + '" data-duration="' + (item.durationMin | 0) + '" onclick="toggleServiceCard(this)">' +
+                    '<div class="flex justify-between items-center"><div><h4 class="text-xl font-bold">' + safeName + '</h4><p class="text-gray-600">Tap to add</p></div><div class="text-right"><p class="text-sm text-gray-500">' + formatDuration(item.durationMin) + '</p></div></div></div>';
+            }).join('');
+            if (typeof updateSummary === 'function') updateSummary();
+        }
+
+        function renderKarigarFilter(karigars) {
+            var selectEl = document.getElementById('karigarFilter');
+            if (!selectEl) return;
+            var active = (Array.isArray(karigars) ? karigars : []).filter(function(item) { return item && item.active !== false; });
+            var options = ['<option value="ANY">Any Karigar</option>'].concat(active.map(function(item) {
+                var id = String(item.karigarId || '').toUpperCase();
+                var name = String(item.name || id || 'Karigar').trim();
+                return '<option value="' + id + '">' + name + '</option>';
+            }));
+            selectEl.innerHTML = options.join('');
+            if (selectedKarigarId !== 'ANY' && !active.some(function(item) { return String(item.karigarId || '').toUpperCase() === selectedKarigarId; })) {
+                selectedKarigarId = 'ANY';
+            }
+            selectEl.value = selectedKarigarId;
+        }
+
+        var karigarFilterEl = document.getElementById('karigarFilter');
+        if (karigarFilterEl) {
+            karigarFilterEl.addEventListener('change', function() {
+                selectedKarigarId = String(this.value || 'ANY').toUpperCase();
+                clearSelectedSlot();
+                if (currentSlotState) renderSlots(currentSlotState);
+            });
+        }
 
         if (SALON_ID) {
             var salonIdEl = document.getElementById('salonId');
@@ -243,6 +327,11 @@
                     if (!d.success || !d.salon) return;
                     var s = d.salon;
                     currentSalonName = s.salonName || 'Salon';
+                    currentBusinessType = s.businessType === 'beauty_parlour' ? 'beauty_parlour' : 'salon';
+                    currentBusinessLabel = s.businessLabel || (currentBusinessType === 'beauty_parlour' ? 'Beauty Parlour' : 'Salon');
+                    document.title = 'BookMySalon - ' + currentBusinessLabel + ' Booking';
+                    var idLabelEl = document.getElementById('salonIdLabel');
+                    if (idLabelEl) idLabelEl.textContent = currentBusinessLabel + ' ID';
                     var el = document.getElementById('salonName');
                     if (el) el.textContent = currentSalonName;
                     var loc = document.getElementById('salonLocation');
@@ -252,8 +341,10 @@
                         var wl = document.getElementById('salonWhatsApp');
                         var waNum = '91' + s.ownerPhone.replace(/\D/g, '').slice(-10);
                         if (ph) ph.textContent = s.ownerPhone;
-                        if (wl) { wl.href = 'https://wa.me/' + waNum; wl.classList.remove('hidden'); }
+                        if (wl) { wl.href = 'https://wa.me/' + waNum; wl.textContent = '\uD83D\uDCAC Message ' + currentBusinessLabel; wl.classList.remove('hidden'); }
                     }
+                    renderServiceCards(s.services || []);
+                    renderKarigarFilter(s.karigars || []);
                     renderSubscriptionNotice(s.subscription);
                 }).catch(function() {});
         }
@@ -274,70 +365,158 @@
                 .catch(function() { showBanner('Network error. Please refresh.', 'error'); });
         }
 
+        function slotOverlaps(a, b) {
+            return a.startMin < b.endMin && a.endMin > b.startMin;
+        }
+
+        function buildAvailableTimeline(state) {
+            var durationMin = getSelectedDurationMin();
+            if (!durationMin) return [];
+
+            var openMin = parseTimeToMin(state.openingTime || '10:00');
+            var closeMin = parseTimeToMin(state.closingTime || '21:00');
+            if (openMin == null || closeMin == null || closeMin <= openMin) return [];
+
+            var bufferMin = Math.max(0, parseInt(state.bufferMin || 5, 10) || 5);
+            var karigars = (Array.isArray(state.karigars) ? state.karigars : []).filter(function(item) { return item && item.active !== false; });
+            if (!karigars.length) return [];
+
+            var bookings = Array.isArray(state.bookings) ? state.bookings : [];
+            var chosenDate = (document.getElementById('bookingDate') || {}).value || currentDate;
+            var today = new Date().toISOString().split('T')[0];
+            var now = new Date();
+            var nowMin = now.getHours() * 60 + now.getMinutes();
+            var step = 5;
+
+            var timeline = [];
+            karigars.forEach(function(karigar) {
+                var karigarId = String(karigar.karigarId || '').toUpperCase();
+                if (selectedKarigarId !== 'ANY' && karigarId !== selectedKarigarId) return;
+
+                var karigarBookings = bookings.filter(function(entry) {
+                    var entryKarigarId = String(entry.karigarId || '').toUpperCase();
+                    return !entryKarigarId || entryKarigarId === karigarId;
+                }).map(function(entry) {
+                    var startMin = parseTimeToMin(entry.startTime);
+                    if (startMin == null) return null;
+                    var endMin = parseTimeToMin(entry.endTime);
+                    if (endMin == null || endMin <= startMin) {
+                        endMin = startMin + Math.max(5, parseInt(entry.durationMin, 10) || 30);
+                    }
+                    return { startMin: startMin, endMin: endMin + bufferMin };
+                }).filter(Boolean);
+
+                for (var startMin = openMin; startMin + durationMin <= closeMin; startMin += step) {
+                    if (chosenDate === today && startMin <= nowMin) continue;
+                    var candidate = { startMin: startMin, endMin: startMin + durationMin + bufferMin };
+                    var hasConflict = karigarBookings.some(function(existing) { return slotOverlaps(candidate, existing); });
+                    if (hasConflict) continue;
+                    timeline.push({
+                        startTime: toTime(startMin),
+                        endTime: toTime(startMin + durationMin),
+                        karigarId: karigarId,
+                        karigarName: String(karigar.name || karigarId || 'Karigar').trim()
+                    });
+                }
+            });
+
+            timeline.sort(function(a, b) {
+                var diff = parseTimeToMin(a.startTime) - parseTimeToMin(b.startTime);
+                if (diff !== 0) return diff;
+                return a.karigarName.localeCompare(b.karigarName);
+            });
+            return timeline;
+        }
+
+        function pickTimeSlot(element, slot) {
+            document.querySelectorAll('.time-slot').forEach(function(item) {
+                item.classList.remove('selected', 'ring-2', 'ring-pink-400');
+            });
+            element.classList.add('selected', 'ring-2', 'ring-pink-400');
+            selectedSlot = slot;
+            selectedTime = slot.startTime + ' - ' + slot.endTime + ' (' + slot.karigarName + ')';
+            var summaryTime = document.getElementById('summaryTime');
+            if (summaryTime) summaryTime.textContent = selectedTime;
+        }
+
         function renderSlots(state) {
             var container = document.getElementById('timeSlotsContainer');
             if (!container) return;
+            currentSlotState = state;
             renderSubscriptionNotice(state.subscription);
+            renderKarigarFilter(state.karigars || []);
+
             if (state.subscription && !state.subscription.isActive) {
                 showBanner(state.subscription.customerMessage || 'Salon subscription inactive hai.', 'error');
                 container.innerHTML = '<div class="col-span-2 text-center text-red-500 py-8 text-sm">Booking temporarily unavailable hai. Salon owner ko subscription renew karne bolein.</div>';
                 return;
             }
-            if (!state.isOpen || !state.slots || !state.slots.length) {
-                showBanner('⏸️ Abhi booking band hai. Baad mein check karein.', 'warning');
-                container.innerHTML = '<div class="col-span-2 text-center text-gray-500 py-8 text-sm">Aaj ke liye koi slot available nahi hai.</div>';
+            if (!state.isOpen) {
+                showBanner('Abhi booking band hai. Baad mein check karein.', 'warning');
+                container.innerHTML = '<div class="col-span-2 text-center text-gray-500 py-8 text-sm">Aaj ke liye booking open nahi hai.</div>';
                 return;
             }
-            var now = new Date();
-            var nowMin = now.getHours() * 60 + now.getMinutes();
-            showBanner('🟢 Booking OPEN hai — Neeche se time slot chunein', 'success');
-            container.innerHTML = state.slots.map(function(slot) {
-                var p = slot.time.split(':').map(Number);
-                var slotMin = p[0] * 60 + p[1];
-                var isPast = slotMin + 30 <= nowMin;
-                var isFull = slot.booked >= slot.capacity;
-                var rem = slot.capacity - slot.booked;
-                if (isPast || isFull) {
-                    return '<div class="rounded-lg shadow p-4 text-center cursor-not-allowed select-none ' + (isPast ? 'bg-gray-100 text-gray-400' : 'bg-red-100 text-red-600') + '"><p class="font-bold text-lg">' + slot.time + '</p><p class="text-xs">' + (isPast ? 'Past' : 'Full') + '</p><p class="text-xs opacity-70">' + slot.booked + '/' + slot.capacity + '</p></div>';
-                }
-                return '<div class="bg-white rounded-lg shadow p-4 text-center text-gray-900 cursor-pointer hover:shadow-lg hover:bg-pink-50 transition time-slot" onclick="selectTimeSlot(this,\'' + slot.time + '\')"><p class="font-bold text-lg">' + slot.time + '</p><p class="text-xs text-green-600 font-semibold">' + rem + ' seat' + (rem > 1 ? 's' : '') + ' available</p><p class="text-xs text-gray-500">' + slot.booked + '/' + slot.capacity + ' booked</p></div>';
+            if (!selectedServices.length) {
+                showBanner('Pehle service select karein. Duration ke hisaab se slots ayenge.', 'info');
+                container.innerHTML = '<div class="col-span-2 text-center text-gray-500 py-8 text-sm">Service select karte hi slot list update hogi.</div>';
+                return;
+            }
+
+            var durationMin = getSelectedDurationMin();
+            var timeline = buildAvailableTimeline(state);
+            if (!timeline.length) {
+                showBanner('Selected duration ke liye koi matching slot nahi mila.', 'warning');
+                container.innerHTML = '<div class="col-span-2 text-center text-gray-500 py-8 text-sm">Dusra time ya karigar select karein.</div>';
+                return;
+            }
+
+            showBanner('Booking OPEN hai - Total duration ' + formatDuration(durationMin) + '.', 'success');
+            container.innerHTML = timeline.map(function(slot, idx) {
+                function esc(s) { return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'); }
+                return '<button type="button" class="bg-white rounded-lg shadow p-4 text-center text-gray-900 cursor-pointer hover:shadow-lg hover:bg-pink-50 transition time-slot" data-slot-index="' + idx + '"><p class="font-bold text-lg">' + esc(slot.startTime) + ' - ' + esc(slot.endTime) + '</p><p class="text-xs text-gray-600">' + esc(slot.karigarName) + '</p></button>';
             }).join('');
+
+            var items = container.querySelectorAll('.time-slot');
+            items.forEach(function(item) {
+                item.addEventListener('click', function() {
+                    var idx = parseInt(this.getAttribute('data-slot-index'), 10);
+                    var slot = timeline[idx];
+                    if (!slot) return;
+                    pickTimeSlot(this, slot);
+                });
+            });
         }
 
-        // Google Calendar URL builder
-        function buildCalendarUrl(salonName, date, time) {
+        function buildCalendarUrl(salonName, date, startTime, endTime) {
             var d = date.replace(/-/g, '');
-            var tp = time.split(':');
-            var h = parseInt(tp[0]); var m = parseInt(tp[1] || 0);
+            var sp = startTime.split(':');
+            var ep = endTime.split(':');
             function pad(n) { return n < 10 ? '0' + n : '' + n; }
-            var startStr = d + 'T' + pad(h) + pad(m) + '00';
-            var eh = h; var em = m + 30;
-            if (em >= 60) { eh++; em -= 60; }
-            var endStr = d + 'T' + pad(eh) + pad(em) + '00';
+            var startStr = d + 'T' + pad(parseInt(sp[0], 10)) + pad(parseInt(sp[1] || 0, 10)) + '00';
+            var endStr = d + 'T' + pad(parseInt(ep[0], 10)) + pad(parseInt(ep[1] || 0, 10)) + '00';
             return 'https://calendar.google.com/calendar/render?action=TEMPLATE' +
-                '&text=' + encodeURIComponent('Salon Appointment - ' + salonName) +
+                '&text=' + encodeURIComponent(currentBusinessLabel + ' Appointment - ' + salonName) +
                 '&dates=' + startStr + '/' + endStr +
                 '&details=' + encodeURIComponent('BookMySalon se booking. Samay pe aayen!') +
                 '&location=' + encodeURIComponent(salonName) +
                 '&sf=true&output=xml';
         }
 
-        // Show confirmation card after booking
-        function showConfirmCard(customerName, phone, time) {
+        function showConfirmCard(customerName, phone, slotLabel, startTime, endTime) {
             lastBookedPhone = phone;
             var card = document.getElementById('confirmationCard');
             var msg = document.getElementById('confirmMsg');
             var calBtn = document.getElementById('calendarBtn');
-            if (msg) msg.textContent = customerName + ' — ' + time + ' baje ka slot confirm ho gaya ✂️';
-            if (calBtn) calBtn.href = buildCalendarUrl(currentSalonName, currentDate, time);
+            if (msg) msg.textContent = customerName + ' - ' + slotLabel + ' slot confirm ho gaya.';
+            if (calBtn) calBtn.href = buildCalendarUrl(currentSalonName, currentDate, startTime, endTime);
             selectedStars = 0;
-            document.querySelectorAll('.star-btn').forEach(function(s) { s.textContent = '☆'; });
+            document.querySelectorAll('.star-btn').forEach(function(s) { s.textContent = '?'; });
             var rm = document.getElementById('reviewMsg');
             var rb = document.getElementById('reviewBtn');
             var rc = document.getElementById('reviewComment');
             var rs = document.getElementById('ratingSection');
             if (rm) rm.classList.add('hidden');
-            if (rb) { rb.disabled = false; rb.textContent = '⭐ Rating Submit Karen'; rb.style.display = ''; }
+            if (rb) { rb.disabled = false; rb.textContent = 'Rating Submit Karen'; rb.style.display = ''; }
             if (rc) rc.value = '';
             if (rs) rs.style.display = '';
             if (card) card.classList.remove('hidden');
@@ -347,21 +526,26 @@
             var card = document.getElementById('confirmationCard');
             if (card) card.classList.add('hidden');
             resetBooking();
+            selectedServices = [];
+            selectedSlot = null;
+            document.querySelectorAll('.service-card').forEach(function(cardEl) {
+                cardEl.classList.remove('selected', 'ring-2', 'ring-pink-400');
+            });
+            clearSelectedSlot();
+            if (currentSlotState) renderSlots(currentSlotState);
         };
 
-        // Star rating click
         document.addEventListener('click', function(e) {
             if (e.target.classList.contains('star-btn')) {
                 selectedStars = parseInt(e.target.getAttribute('data-stars'));
                 document.querySelectorAll('.star-btn').forEach(function(s) {
-                    s.textContent = parseInt(s.getAttribute('data-stars')) <= selectedStars ? '★' : '☆';
+                    s.textContent = parseInt(s.getAttribute('data-stars')) <= selectedStars ? '?' : '?';
                 });
             }
         });
 
-        // Submit review
         window.submitReview = function() {
-            if (!selectedStars) { alert('Pehle stars chunein ☆'); return; }
+            if (!selectedStars) { alert('Pehle stars chunein ?'); return; }
             var comment = document.getElementById('reviewComment') ? document.getElementById('reviewComment').value.trim() : '';
             var rb = document.getElementById('reviewBtn');
             if (rb) { rb.disabled = true; rb.textContent = 'Submit ho raha hai...'; }
@@ -371,19 +555,18 @@
                 body: JSON.stringify({ salonId: SALON_ID, customerPhone: lastBookedPhone, stars: selectedStars, comment: comment })
             })
             .then(function(r) { return r.json(); })
-            .then(function(d) {
+            .then(function() {
                 var rm = document.getElementById('reviewMsg');
-                if (rm) { rm.textContent = '✅ Review submit ho gaya! Shukriya 🙏'; rm.classList.remove('hidden'); }
+                if (rm) { rm.textContent = 'Review submit ho gaya! Shukriya.'; rm.classList.remove('hidden'); }
                 if (rb) rb.style.display = 'none';
                 setTimeout(fetchReviews, 1000);
             })
             .catch(function() {
-                if (rb) { rb.disabled = false; rb.textContent = '⭐ Rating Submit Karen'; }
+                if (rb) { rb.disabled = false; rb.textContent = 'Rating Submit Karen'; }
                 alert('Review submit nahi hua. Dobara try karein.');
             });
         };
 
-        // Load reviews / rating display
         function fetchReviews() {
             if (!SALON_ID) return;
             fetch('/api/salon-ratings/' + SALON_ID)
@@ -392,43 +575,56 @@
                     if (!d.success) return;
                     var rd = document.getElementById('salonRatingDisplay');
                     var rc = document.getElementById('salonReviewCount');
-                    if (d.avgRating && rd) { rd.textContent = '⭐ ' + d.avgRating; rd.classList.remove('hidden'); }
+                    if (d.avgRating && rd) { rd.textContent = '? ' + d.avgRating; rd.classList.remove('hidden'); }
                     if (d.totalReviews > 0 && rc) { rc.textContent = '(' + d.totalReviews + ' reviews)'; rc.classList.remove('hidden'); }
                 }).catch(function() {});
         }
 
-        // Override confirmBooking
         window.confirmBooking = function() {
             var customerName = (document.getElementById('customerName') ? document.getElementById('customerName').value : '').trim();
             var rawPhone = (document.getElementById('customerPhone') ? document.getElementById('customerPhone').value : '').replace(/\D/g, '');
             if (!currentSubscriptionActive) { alert('Salon subscription inactive hai. Abhi booking available nahi hai.'); return; }
-            if (!selectedService || !selectedTime) { alert('⚠️ Service aur time slot dono select karein.'); return; }
-            if (!customerName) { alert('⚠️ Apna naam bharen.'); return; }
-            if (!/^[6-9]\d{9}$/.test(rawPhone)) { alert('⚠️ Valid 10-digit WhatsApp number bharen.'); return; }
+            if (!selectedServices.length || !selectedSlot) { alert('Service aur time slot dono select karein.'); return; }
+            if (!customerName) { alert('Apna naam bharen.'); return; }
+            if (!/^[6-9]\d{9}$/.test(rawPhone)) { alert('Valid 10-digit WhatsApp number bharen.'); return; }
             if (!SALON_ID) { alert('Salon ID nahi mila. QR dubara scan karein.'); return; }
+
             var btn = document.querySelector('[onclick="confirmBooking()"]');
             if (btn) { btn.disabled = true; btn.textContent = 'Booking ho rahi hai...'; }
+
+            var durationMin = getSelectedDurationMin();
+            var serviceNames = selectedServices.map(function(item) { return item.name; });
             fetch('/api/book-slot', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ salonId: SALON_ID, time: selectedTime, customerName: customerName, customerPhone: rawPhone })
+                body: JSON.stringify({
+                    salonId: SALON_ID,
+                    startTime: selectedSlot.startTime,
+                    endTime: selectedSlot.endTime,
+                    customerName: customerName,
+                    customerPhone: rawPhone,
+                    durationMin: durationMin,
+                    serviceName: serviceNames.join(', '),
+                    selectedServices: selectedServices,
+                    karigarId: selectedSlot.karigarId
+                })
             })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                if (btn) { btn.disabled = false; btn.textContent = '✅ Confirm Booking'; }
+                if (btn) { btn.disabled = false; btn.textContent = 'Confirm Booking'; }
                 if (data.success) {
-                    var bt = selectedTime;
+                    var slotLabel = selectedSlot.startTime + ' - ' + selectedSlot.endTime + ' (' + selectedSlot.karigarName + ')';
                     document.getElementById('customerName').value = '';
                     document.getElementById('customerPhone').value = '';
-                    showConfirmCard(customerName, rawPhone, bt);
-                    setTimeout(loadSlots, 1500);
+                    showConfirmCard(customerName, rawPhone, slotLabel, selectedSlot.startTime, selectedSlot.endTime);
+                    setTimeout(loadSlots, 1200);
                 } else {
-                    alert('❌ ' + (data.msg || 'Booking fail ho gayi. Dobara try karein.'));
+                    alert(data.msg || 'Booking fail ho gayi. Dobara try karein.');
                     loadSlots();
                 }
             })
             .catch(function() {
-                if (btn) { btn.disabled = false; btn.textContent = '✅ Confirm Booking'; }
+                if (btn) { btn.disabled = false; btn.textContent = 'Confirm Booking'; }
                 alert('Network error. Internet check karke retry karein.');
             });
         };
@@ -439,7 +635,7 @@
             fetchReviews();
             loadSlots();
         } else {
-            showBanner('⚠️ Salon ID nahi mila. QR code dubara scan karein.', 'error');
+            showBanner('Salon ID nahi mila. QR code dubara scan karein.', 'error');
         }
     })();
     </script>
@@ -448,7 +644,7 @@
     <footer class="bg-gray-800 py-8 px-4 border-t border-gray-700 mt-12">
         <div class="max-w-6xl mx-auto text-center text-gray-400">
             <p class="font-semibold text-gray-200">BookMySalon by Chandrashekhar Gole</p>
-            <p class="mt-2 text-xs">&copy; 2024 BookMySalon. All rights reserved.</p>
+            <p class="mt-2 text-xs">&copy; 2026 BookMySalon. All rights reserved.</p>
         </div>
     </footer>
 </body>

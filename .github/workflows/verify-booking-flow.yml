@@ -1,0 +1,79 @@
+name: Verify Booking Flow
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - api.js
+      - scripts/**
+      - package.json
+      - package-lock.json
+      - .github/workflows/verify-booking-flow.yml
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - api.js
+      - scripts/**
+      - package.json
+      - package-lock.json
+      - .github/workflows/verify-booking-flow.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-booking-flow-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-booking-flow:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CI: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run booking flow verification
+        run: |
+          set -o pipefail
+          npm run verify:booking-flow | tee verify-booking-flow.log
+
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-booking-flow-log
+          path: verify-booking-flow.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Publish run summary
+        if: always()
+        run: |
+          echo "## Booking Flow Verification" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Command: npm run verify:booking-flow" >> $GITHUB_STEP_SUMMARY
+          if [ -f verify-booking-flow.log ]; then
+            echo "- Result token:" >> $GITHUB_STEP_SUMMARY
+            grep "VERIFY_BOOKING_FLOW=" verify-booking-flow.log >> $GITHUB_STEP_SUMMARY || echo "VERIFY_BOOKING_FLOW token missing" >> $GITHUB_STEP_SUMMARY
+          fi

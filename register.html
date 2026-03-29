@@ -23,8 +23,11 @@
             <button onclick="window.location.href='index.html'" class="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold hover:border-pink-400/70 hover:text-pink-300 transition">
                 ← Back to Home
             </button>
-            <h1 class="text-lg md:text-xl font-extrabold tracking-wide">Salon Partner Onboarding</h1>
-            <a href="salons.html" class="text-xs md:text-sm font-semibold text-cyan-300 hover:text-cyan-200 transition">View Live Salons</a>
+            <h1 id="registerTypeHeading" class="text-lg md:text-xl font-extrabold tracking-wide">Salon Partner Onboarding</h1>
+            <div class="flex items-center gap-3">
+                <a href="faq.html" class="text-xs md:text-sm font-semibold text-cyan-300 hover:text-cyan-200 transition">Help & FAQ</a>
+                <a href="salons.html" class="text-xs md:text-sm font-semibold text-cyan-300 hover:text-cyan-200 transition">View Live Salons</a>
+            </div>
         </div>
     </header>
 
@@ -37,10 +40,22 @@
                     <span class="rounded-full bg-pink-500/20 text-pink-200 px-3 py-1 text-xs font-bold tracking-wide">WHATSAPP READY</span>
                 </div>
 
-                <h2 class="text-3xl md:text-4xl font-extrabold leading-tight mb-2">Register your salon in <span class="text-cyan-300">under 2 minutes</span></h2>
-                <p class="text-sm md:text-base text-gray-300 mb-7">Get your instant booking link and start receiving customer appointments on WhatsApp.</p>
+                <div class="mb-5 rounded-2xl border border-cyan-300/30 bg-cyan-500/10 p-4">
+                    <p class="text-sm font-bold text-cyan-200">Google Profile Website Guide (Hindi + English)</p>
+                    <p class="mt-1 text-xs text-cyan-100/90">Salon aur Beauty Parlour dono ke liye: Google Maps profile me BookMySalon website link kaise add karein.</p>
+                    <a href="google-guide.html" class="mt-3 inline-flex items-center gap-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 px-3 py-2 text-xs font-bold text-gray-950 transition">Open Guide ↗</a>
+                </div>
+
+                <h2 id="registerHeroTitle" class="text-3xl md:text-4xl font-extrabold leading-tight mb-2">Register your salon in <span class="text-cyan-300">under 2 minutes</span></h2>
+                <p id="registerHeroSub" class="text-sm md:text-base text-gray-300 mb-7">Get your instant booking link and start receiving customer appointments on WhatsApp.</p>
+
+                <div id="registerTypeSwitchRow" class="mb-6 grid sm:grid-cols-2 gap-3">
+                    <button id="typeSalonBtn" type="button" onclick="setRegistrationBusinessType('salon')" class="rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm font-extrabold transition">🏪 Register Salon</button>
+                    <button id="typeBeautyBtn" type="button" onclick="setRegistrationBusinessType('beauty_parlour')" class="rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm font-extrabold transition">💄 Register Beauty Parlour</button>
+                </div>
 
                 <form id="registrationForm" onsubmit="handleSalonRegistrationSubmit(event)" class="space-y-5">
+                    <input type="hidden" id="businessTypeInput" value="salon" />
                     <div class="grid md:grid-cols-2 gap-4">
                         <div class="md:col-span-2">
                             <label class="block text-sm font-semibold mb-2 text-gray-200">Salon Name *</label>
@@ -97,13 +112,36 @@
                     </div>
 
                     <div>
-                        <label class="block text-sm font-semibold mb-3 text-gray-200">Top Services (Optional)</label>
-                        <div class="grid sm:grid-cols-2 gap-2 text-sm">
-                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" value="Haircut">Haircut</label>
-                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" value="Beard Trim">Beard Trim</label>
-                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" value="Hair Spa">Hair Spa</label>
-                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" value="Facial">Facial</label>
+                        <label id="servicesLabel" class="block text-sm font-semibold mb-3 text-gray-200">Services with Duration (Optional) - Salon</label>
+                        <div id="salonServicesBox" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="salon" data-duration="30" value="Haircut">Haircut (30 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="salon" data-duration="20" value="Beard Trim">Beard Trim (20 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="salon" data-duration="20" value="Shave">Shave (20 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="salon" data-duration="45" value="Hair Spa">Hair Spa (45 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="salon" data-duration="90" value="Hair Color">Hair Color (90 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="salon" data-duration="120" value="Hair Smoothening">Hair Smoothening (120 min)</label>
                         </div>
+
+                        <div id="beautyServicesBox" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm hidden">
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="beauty_parlour" data-duration="60" value="Facial">Facial (60 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="beauty_parlour" data-duration="45" value="Cleanup">Cleanup (45 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="beauty_parlour" data-duration="30" value="Bleach">Bleach (30 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="beauty_parlour" data-duration="15" value="Threading">Threading (15 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="beauty_parlour" data-duration="15" value="Eyebrow">Eyebrow (15 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="beauty_parlour" data-duration="10" value="Upper Lips">Upper Lips (10 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="beauty_parlour" data-duration="60" value="Waxing">Waxing (60 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="beauty_parlour" data-duration="45" value="Manicure">Manicure (45 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="beauty_parlour" data-duration="60" value="Pedicure">Pedicure (60 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="beauty_parlour" data-duration="120" value="Bridal Makeup">Bridal Makeup (120 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="beauty_parlour" data-duration="75" value="Party Makeup">Party Makeup (75 min)</label>
+                            <label class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition"><input class="mr-2" type="checkbox" name="serviceItem" data-service-type="beauty_parlour" data-duration="30" value="Detan">Detan (30 min)</label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="karigarsInput" class="block text-sm font-semibold mb-2 text-gray-200">Karigar List (Optional)</label>
+                        <textarea id="karigarsInput" rows="4" placeholder="Raju\nImran\nSahil" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"></textarea>
+                        <p class="mt-2 text-xs text-gray-400">Ek line mein ek naam likhein. Agar empty raha to default 2 active karigar create honge.</p>
                     </div>
 
                     <button type="submit" id="registerBtn" class="w-full rounded-xl bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 px-5 py-4 text-lg font-extrabold tracking-wide text-white shadow-xl hover:shadow-pink-500/25 transition-transform hover:scale-[1.01]">

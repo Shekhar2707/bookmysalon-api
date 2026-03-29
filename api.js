@@ -16,6 +16,9 @@ function sanitizeDataNamespace(value) {
 const DATA_NAMESPACE = sanitizeDataNamespace(process.env.DATA_NAMESPACE || '');
 const DEMO_TOOLS_ENABLED = String(process.env.ENABLE_DEMO_TOOLS || '').trim().toLowerCase() === 'true';
 const DEMO_EMAIL_DOMAIN = String(process.env.DEMO_EMAIL_DOMAIN || '@demo.local').trim().toLowerCase();
+const DEFAULT_SERVICE_DURATION_MIN = Math.max(10, parseInt(process.env.DEFAULT_SERVICE_DURATION_MIN || '30', 10) || 30);
+const LEGACY_BOOKING_DURATION_MIN = Math.max(10, parseInt(process.env.LEGACY_BOOKING_DURATION_MIN || String(DEFAULT_SERVICE_DURATION_MIN), 10) || DEFAULT_SERVICE_DURATION_MIN);
+const BOOKING_BUFFER_MIN = Math.max(0, parseInt(process.env.BOOKING_BUFFER_MIN || '5', 10) || 5);
 const DATA_DIR = path.join(__dirname, DATA_NAMESPACE ? `data-${DATA_NAMESPACE}` : 'data');
 const REGISTRY_FILE = path.join(DATA_DIR, 'salon-registry.json');
 const CUSTOMER_SALONS_FILE = path.join(DATA_DIR, 'customer-salons.json');
@@ -285,9 +288,14 @@ function getSalonSubscriptionSnapshot(salon) {
 
 function buildPublicSalonData(salon) {
   const subscription = getSalonSubscriptionSnapshot(salon);
+  const businessType = String(salon.businessType || 'salon').toLowerCase() === 'beauty_parlour' ? 'beauty_parlour' : 'salon';
+  const services = normalizeServiceList(salon.services);
+  const karigars = normalizeKarigarList(salon.karigars, salon.karigar || 0);
   return {
     salonId: salon.salonId,
     salonName: salon.salonName || 'My Salon',
+    businessType,
+    businessLabel: businessType === 'beauty_parlour' ? 'Beauty Parlour' : 'Salon',
     ownerName: salon.ownerName || 'Owner',
     ownerPhone: salon.ownerPhone ? `0${String(salon.ownerPhone).slice(-10)}` : '',
     bookingUrl: salon.bookingUrl || '',
@@ -297,6 +305,8 @@ function buildPublicSalonData(salon) {
     city: salon.city || '',
     state: salon.state || '',
     pincode: salon.pincode || '',
+    services,
+    karigars,
     latitude: salon.latitude ?? null,
     longitude: salon.longitude ?? null,
     registeredAt: salon.registeredAt || null,
@@ -312,6 +322,187 @@ function normalizeText(value) {
 function parseCoordinate(value) {
   const parsed = parseFloat(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseTimeToMinutes(value) {
+  if (!value || typeof value !== 'string') return null;
+  const parts = value.split(':').map((v) => parseInt(v, 10));
+  if (parts.length < 2) return null;
+  const hh = parts[0];
+  const mm = parts[1];
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+  return hh * 60 + mm;
+}
+
+function minutesToTimeString(totalMinutes) {
+  const bounded = Math.max(0, Math.min(24 * 60, totalMinutes));
+  const hh = String(Math.floor(bounded / 60)).padStart(2, '0');
+  const mm = String(bounded % 60).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+function normalizeServiceList(services) {
+  if (!Array.isArray(services)) return [];
+  const out = [];
+  for (const item of services) {
+    if (typeof item === 'string') {
+      const name = item.trim();
+      if (name) out.push({ name, durationMin: DEFAULT_SERVICE_DURATION_MIN });
+      continue;
+    }
+    const name = String(item?.name || '').trim();
+    if (!name) continue;
+    const durationMin = Math.max(5, Math.min(240, parseInt(item?.durationMin, 10) || DEFAULT_SERVICE_DURATION_MIN));
+    out.push({ name, durationMin });
+  }
+  return out;
+}
+
+function normalizeKarigarList(karigars, fallbackCount = 0) {
+  const source = Array.isArray(karigars) ? karigars : [];
+  const normalized = [];
+  source.forEach((item, index) => {
+    const name = String(item?.name || '').trim();
+    if (!name) return;
+    const id = String(item?.karigarId || `K${index + 1}`).trim().toUpperCase();
+    if (!id) return;
+    normalized.push({
+      karigarId: id,
+      name,
+      active: item?.active !== false
+    });
+  });
+
+  if (normalized.length) return normalized;
+
+  const count = Math.max(0, Math.min(30, parseInt(fallbackCount, 10) || 0));
+  const out = [];
+  for (let i = 0; i < count; i += 1) {
+    out.push({ karigarId: `K${i + 1}`, name: `Karigar ${i + 1}`, active: true });
+  }
+  return out;
+}
+
+function sanitizeBookingRange(startTime, endTime, durationMin, defaultDurationMin = DEFAULT_SERVICE_DURATION_MIN) {
+  const startMin = parseTimeToMinutes(startTime);
+  if (startMin == null) return null;
+
+  let normalizedDuration = Math.max(5, Math.min(300, parseInt(durationMin, 10) || defaultDurationMin));
+  let endMin = parseTimeToMinutes(endTime);
+  if (endMin == null || endMin <= startMin) {
+    endMin = startMin + normalizedDuration;
+  } else {
+    normalizedDuration = endMin - startMin;
+  }
+
+  return {
+    startMin,
+    endMin,
+    startTime: minutesToTimeString(startMin),
+    endTime: minutesToTimeString(endMin),
+    durationMin: normalizedDuration
+  };
+}
+
+function extractLegacyBookingsFromSlots(stateObj) {
+  const slots = Array.isArray(stateObj?.slots) ? stateObj.slots : [];
+  const unique = new Map();
+
+  slots.forEach((slot) => {
+    const slotStart = String(slot?.time || '').trim();
+    const slotBookings = Array.isArray(slot?.bookings) ? slot.bookings : [];
+    slotBookings.forEach((entry) => {
+      if (entry?.sequence && entry.sequence !== 1) return;
+      const phone = String(entry?.phone || '').replace(/\D/g, '').slice(-10);
+      const stamp = String(entry?.bookedAt || entry?.createdAt || '');
+      const key = [phone, stamp, slotStart].join('|');
+      if (!phone || unique.has(key)) return;
+      const guessedDuration = Math.max(5, Math.min(300,
+        parseInt(entry?.serviceDurationMin, 10)
+        || ((parseInt(entry?.totalSlots, 10) || 1) * 30)
+        || LEGACY_BOOKING_DURATION_MIN
+      ));
+      unique.set(key, {
+        bookingId: `LEGACY-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+        name: String(entry?.name || 'Customer').trim() || 'Customer',
+        phone,
+        startTime: slotStart,
+        endTime: entry?.endTime || null,
+        durationMin: guessedDuration,
+        serviceName: String(entry?.serviceName || '').slice(0, 80),
+        createdAt: stamp || new Date().toISOString(),
+        karigarId: String(entry?.karigarId || '').trim().toUpperCase() || null,
+        karigarName: String(entry?.karigarName || '').trim() || null
+      });
+    });
+  });
+
+  return Array.from(unique.values());
+}
+
+function resolveBookingRangeMinutes(booking) {
+  const fallback = Math.max(5, parseInt(booking?.durationMin, 10) || LEGACY_BOOKING_DURATION_MIN);
+  return sanitizeBookingRange(booking?.startTime, booking?.endTime, fallback, LEGACY_BOOKING_DURATION_MIN);
+}
+
+function hasTimeOverlap(rangeA, rangeB) {
+  return rangeA.startMin < rangeB.endMin && rangeA.endMin > rangeB.startMin;
+}
+
+function activeKarigarsFromState(stateObj, salon) {
+  const fromState = normalizeKarigarList(stateObj?.karigars, stateObj?.karigar || 0);
+  if (fromState.length) return fromState;
+  return normalizeKarigarList(salon?.karigars, stateObj?.karigar || 0);
+}
+
+function ensureBookingStateSchema(stateObj, salon) {
+  let changed = false;
+  if (stateObj.bufferMin !== BOOKING_BUFFER_MIN) {
+    stateObj.bufferMin = BOOKING_BUFFER_MIN;
+    changed = true;
+  }
+
+  const normalizedKarigars = activeKarigarsFromState(stateObj, salon);
+  if (JSON.stringify(stateObj.karigars || []) !== JSON.stringify(normalizedKarigars)) {
+    stateObj.karigars = normalizedKarigars;
+    changed = true;
+  }
+
+  const bookingsFromState = Array.isArray(stateObj.bookings) ? stateObj.bookings : [];
+  const mergedBookings = bookingsFromState.length ? bookingsFromState : extractLegacyBookingsFromSlots(stateObj);
+  if (!Array.isArray(stateObj.bookings) || !bookingsFromState.length) {
+    stateObj.bookings = mergedBookings;
+    changed = true;
+  }
+
+  const activeCount = normalizedKarigars.filter((k) => k.active !== false).length;
+  if (stateObj.karigar !== activeCount) {
+    stateObj.karigar = activeCount;
+    changed = true;
+  }
+
+  return changed;
+}
+
+function rebuildLegacySlotsFromBookings(stateObj) {
+  const activeCount = Math.max(0, (stateObj.karigars || []).filter((k) => k.active !== false).length);
+  const legacySlots = generateSlots(stateObj.openingTime, stateObj.closingTime, activeCount);
+  const ranges = (Array.isArray(stateObj.bookings) ? stateObj.bookings : [])
+    .map((entry) => resolveBookingRangeMinutes(entry))
+    .filter(Boolean);
+
+  legacySlots.forEach((slot) => {
+    const slotRange = sanitizeBookingRange(slot.time, slot.endTime, 30, 30);
+    if (!slotRange) return;
+    let used = 0;
+    ranges.forEach((entryRange) => {
+      if (hasTimeOverlap(slotRange, entryRange)) used += 1;
+    });
+    slot.booked = Math.min(slot.capacity, used);
+  });
+
+  return legacySlots;
 }
 
 function haversineDistanceKm(lat1, lon1, lat2, lon2) {
@@ -411,10 +602,383 @@ const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '';
 const WHATSAPP_TEMPLATE_NAME = process.env.WHATSAPP_TEMPLATE_NAME || 'hello_world';
 const WHATSAPP_TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || 'en_US';
 const WEBHOOK_VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || 'bookmysalon_verify';
-const ADMIN_PANEL_KEY = process.env.ADMIN_PANEL_KEY || 'bookmysalon_admin_2026';
+const ADMIN_KEY_FILE = path.join(DATA_DIR, 'admin-key.json');
+function loadAdminKey() {
+  try {
+    const raw = fs.readFileSync(ADMIN_KEY_FILE, 'utf8');
+    return JSON.parse(raw).key || process.env.ADMIN_PANEL_KEY || 'bookmysalon_admin_2026';
+  } catch { return process.env.ADMIN_PANEL_KEY || 'bookmysalon_admin_2026'; }
+}
+let ADMIN_PANEL_KEY = loadAdminKey();
+const OPENAI_API_KEY = String(
+  process.env.OPENAI_API_KEY ||
+  process.env.CHATGPT_API_KEY ||
+  process.env.CHAT_GPT_API ||
+  ''
+).trim();
+const OPENAI_MODEL = String(process.env.OPENAI_MODEL || 'gpt-4o-mini').trim();
+const AI_ANALYTICS_FILE = path.join(DATA_DIR, 'ai-analytics.json');
+const AI_LEAD_VERIFY_FILE = path.join(DATA_DIR, 'ai-lead-verifications.json');
+const FEEDBACK_FILE = path.join(DATA_DIR, 'feedback.json');
+
+function loadFeedback() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(FEEDBACK_FILE)) { fs.writeFileSync(FEEDBACK_FILE, '[]', 'utf8'); return []; }
+    const parsed = JSON.parse(fs.readFileSync(FEEDBACK_FILE, 'utf8') || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+function saveFeedback(list) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(FEEDBACK_FILE, JSON.stringify(list, null, 2), 'utf8');
+  } catch (e) { console.error('[Feedback] Save failed:', e.message); }
+}
+const AI_RATE_LIMIT_WINDOW_MS = Math.max(60 * 1000, parseInt(process.env.AI_RATE_LIMIT_WINDOW_MS || '', 10) || (10 * 60 * 1000));
+const AI_RATE_LIMIT_MAX = Math.max(5, parseInt(process.env.AI_RATE_LIMIT_MAX || '', 10) || 25);
+const AI_LEAD_DEDUP_WINDOW_MS = 30 * 60 * 1000;
+const AI_VERIFY_EXPIRY_MS = 10 * 60 * 1000;
+const AI_VERIFY_RATE_WINDOW_MS = 10 * 60 * 1000;
+const AI_VERIFY_RATE_MAX = 5;
+const BOOKMYSALON_WHATSAPP_NUMBER = String(process.env.BOOKMYSALON_WHATSAPP_NUMBER || '919209098349').replace(/\D/g, '');
 const FREE_TRIAL_DAYS = 7;
 const MANUAL_SUBSCRIPTION_LIMIT = 100;
 const DEFAULT_SUBSCRIPTION_DAYS = 30;
+
+const aiRateState = new Map();
+const aiLeadDedupState = new Map();
+const aiVerifyRateState = new Map();
+
+function loadAiLeadVerifications() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(AI_LEAD_VERIFY_FILE)) {
+      fs.writeFileSync(AI_LEAD_VERIFY_FILE, '{}', 'utf8');
+      return {};
+    }
+    const parsed = JSON.parse(fs.readFileSync(AI_LEAD_VERIFY_FILE, 'utf8') || '{}');
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function persistAiLeadVerifications() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(AI_LEAD_VERIFY_FILE, JSON.stringify(aiLeadVerifications, null, 2), 'utf8');
+  } catch (e) {
+    console.error('[AI Lead Verify] Persist failed:', e.message);
+  }
+}
+
+const aiLeadVerifications = loadAiLeadVerifications();
+
+function normalizeLegacyLeadVerifications() {
+  let changed = false;
+  for (const item of Object.values(aiLeadVerifications)) {
+    if (!item || typeof item !== 'object') continue;
+
+    // Legacy tokens were tied to typed phone; pending tokens should not be locked.
+    if (!item.verifiedAt) {
+      if (item.phone) {
+        item.phone = '';
+        changed = true;
+      }
+      if (item.maskedPhone !== '—') {
+        item.maskedPhone = '—';
+        changed = true;
+      }
+    }
+  }
+  if (changed) persistAiLeadVerifications();
+}
+
+normalizeLegacyLeadVerifications();
+
+function loadAiAnalytics() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(AI_ANALYTICS_FILE)) {
+      fs.writeFileSync(AI_ANALYTICS_FILE, JSON.stringify({ topQuestions: {}, leadEvents: 0, totalChats: 0, latestLeads: [] }, null, 2), 'utf8');
+    }
+    const parsed = JSON.parse(fs.readFileSync(AI_ANALYTICS_FILE, 'utf8') || '{}');
+    return {
+      topQuestions: (parsed && typeof parsed.topQuestions === 'object' && parsed.topQuestions) || {},
+      leadEvents: Number(parsed?.leadEvents || 0),
+      totalChats: Number(parsed?.totalChats || 0),
+      latestLeads: Array.isArray(parsed?.latestLeads) ? parsed.latestLeads : []
+    };
+  } catch {
+    return { topQuestions: {}, leadEvents: 0, totalChats: 0, latestLeads: [] };
+  }
+}
+
+function persistAiAnalytics() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(AI_ANALYTICS_FILE, JSON.stringify(aiAnalytics, null, 2), 'utf8');
+  } catch (e) {
+    console.error('[AI Analytics] Persist failed:', e.message);
+  }
+}
+
+const aiAnalytics = loadAiAnalytics();
+
+function normalizeQuestionForAnalytics(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[^a-z0-9\u0900-\u097f\s?]/g, '')
+    .trim()
+    .slice(0, 180);
+}
+
+function trackQuestion(text) {
+  const q = normalizeQuestionForAnalytics(text);
+  if (!q || q.length < 4) return;
+  aiAnalytics.topQuestions[q] = (aiAnalytics.topQuestions[q] || 0) + 1;
+  aiAnalytics.totalChats += 1;
+  if (aiAnalytics.totalChats % 3 === 0) persistAiAnalytics();
+}
+
+function normalizeLeadPhone(value) {
+  return String(value || '').replace(/\D/g, '').slice(-10);
+}
+
+function isLikelyValidIndianMobile(value) {
+  const phone = normalizeLeadPhone(value);
+  if (!/^[6-9]\d{9}$/.test(phone)) return false;
+  if (/^(\d)\1{9}$/.test(phone)) return false;
+  if (phone === '9876543210' || phone === '9123456789' || phone === '9999999999') return false;
+  return true;
+}
+
+function maskLeadPhone(phone10) {
+  const p = normalizeLeadPhone(phone10);
+  if (!p || p.length < 10) return '—';
+  return `${p.slice(0, 2)}******${p.slice(-2)}`;
+}
+
+function generateLeadVerifyToken() {
+  return `BMS-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+}
+
+function pruneExpiredLeadVerifications() {
+  const now = Date.now();
+  for (const [token, item] of Object.entries(aiLeadVerifications)) {
+    const expiry = Date.parse(item?.expiresAt || 0);
+    const verifiedAt = item?.verifiedAt ? Date.parse(item.verifiedAt) : 0;
+    if ((expiry && expiry < now && !verifiedAt) || (verifiedAt && now - verifiedAt > 7 * 24 * 60 * 60 * 1000)) {
+      delete aiLeadVerifications[token];
+    }
+  }
+}
+
+function findActiveLeadVerificationByPhone(phone) {
+  const normalized = normalizeLeadPhone(phone);
+  const now = Date.now();
+  return Object.values(aiLeadVerifications).find((item) => {
+    if (!item || item.phone !== normalized || item.verifiedAt) return false;
+    const expiry = Date.parse(item.expiresAt || 0);
+    return expiry > now;
+  }) || null;
+}
+
+function checkAiVerifyRateLimit(req) {
+  const now = Date.now();
+  const ip = getClientIp(req);
+  const rec = aiVerifyRateState.get(ip) || { count: 0, resetAt: now + AI_VERIFY_RATE_WINDOW_MS };
+  if (now > rec.resetAt) {
+    rec.count = 0;
+    rec.resetAt = now + AI_VERIFY_RATE_WINDOW_MS;
+  }
+  rec.count += 1;
+  aiVerifyRateState.set(ip, rec);
+  if (rec.count > AI_VERIFY_RATE_MAX) {
+    return { allowed: false, retryAfterSec: Math.ceil((rec.resetAt - now) / 1000) };
+  }
+  return { allowed: true };
+}
+
+function trackLeadEvent(lead, req) {
+  const name = String(lead?.name || '').trim().slice(0, 60);
+  const phone = normalizeLeadPhone(lead?.phone);
+  if (!name && !phone) return;
+
+  const ip = getClientIp(req);
+  const key = phone ? `phone:${phone}` : `name:${name.toLowerCase()}|ip:${ip}`;
+  const now = Date.now();
+  const last = aiLeadDedupState.get(key) || 0;
+  if (now - last < AI_LEAD_DEDUP_WINDOW_MS) return;
+  aiLeadDedupState.set(key, now);
+
+  aiAnalytics.leadEvents += 1;
+  aiAnalytics.latestLeads = Array.isArray(aiAnalytics.latestLeads) ? aiAnalytics.latestLeads : [];
+  aiAnalytics.latestLeads.unshift({
+    name: name || 'Unknown',
+    phone,
+    maskedPhone: maskLeadPhone(phone),
+    capturedAt: new Date().toISOString(),
+    verified: true
+  });
+  if (aiAnalytics.latestLeads.length > 200) {
+    aiAnalytics.latestLeads = aiAnalytics.latestLeads.slice(0, 200);
+  }
+  persistAiAnalytics();
+}
+
+function resetAiLeadState() {
+  const beforeTotalChats = Number(aiAnalytics.totalChats || 0);
+  const beforeTopQuestions = aiAnalytics.topQuestions && typeof aiAnalytics.topQuestions === 'object'
+    ? Object.keys(aiAnalytics.topQuestions).length
+    : 0;
+  const beforeLeadEvents = Number(aiAnalytics.leadEvents || 0);
+  const beforeLatestLeads = Array.isArray(aiAnalytics.latestLeads) ? aiAnalytics.latestLeads.length : 0;
+  const beforePendingTokens = Object.keys(aiLeadVerifications || {}).length;
+
+  aiAnalytics.totalChats = 0;
+  aiAnalytics.topQuestions = {};
+  aiAnalytics.leadEvents = 0;
+  aiAnalytics.latestLeads = [];
+  for (const token of Object.keys(aiLeadVerifications)) {
+    delete aiLeadVerifications[token];
+  }
+  aiLeadDedupState.clear();
+  aiVerifyRateState.clear();
+  persistAiAnalytics();
+  persistAiLeadVerifications();
+
+  return {
+    beforeTotalChats,
+    beforeTopQuestions,
+    beforeLeadEvents,
+    beforeLatestLeads,
+    beforePendingTokens,
+    hadData: (beforeTotalChats > 0) || (beforeTopQuestions > 0) || (beforeLeadEvents > 0) || (beforeLatestLeads > 0) || (beforePendingTokens > 0)
+  };
+}
+
+function getClientIp(req) {
+  const xf = req.headers['x-forwarded-for'];
+  const first = Array.isArray(xf) ? xf[0] : String(xf || '').split(',')[0];
+  return String(first || req.ip || req.connection?.remoteAddress || 'unknown').trim();
+}
+
+function checkAiRateLimit(req) {
+  const now = Date.now();
+  const ip = getClientIp(req);
+  const rec = aiRateState.get(ip) || { count: 0, resetAt: now + AI_RATE_LIMIT_WINDOW_MS };
+  if (now > rec.resetAt) {
+    rec.count = 0;
+    rec.resetAt = now + AI_RATE_LIMIT_WINDOW_MS;
+  }
+  rec.count += 1;
+  aiRateState.set(ip, rec);
+  if (rec.count > AI_RATE_LIMIT_MAX) {
+    const retryAfterSec = Math.ceil((rec.resetAt - now) / 1000);
+    return { allowed: false, retryAfterSec };
+  }
+  return { allowed: true, remaining: Math.max(0, AI_RATE_LIMIT_MAX - rec.count) };
+}
+
+function callOpenAIResponsesApi(payload) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload || {});
+    const req = https.request(
+      {
+        hostname: 'api.openai.com',
+        port: 443,
+        path: '/v1/responses',
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body)
+        }
+      },
+      (resp) => {
+        let raw = '';
+        resp.on('data', (chunk) => {
+          raw += chunk;
+        });
+        resp.on('end', () => {
+          let parsed = null;
+          try {
+            parsed = raw ? JSON.parse(raw) : {};
+          } catch (e) {
+            return reject(new Error('OpenAI parse error: ' + e.message));
+          }
+          if (resp.statusCode < 200 || resp.statusCode >= 300) {
+            const apiMsg = parsed?.error?.message || `OpenAI API error (${resp.statusCode})`;
+            return reject(new Error(apiMsg));
+          }
+          resolve(parsed);
+        });
+      }
+    );
+
+    req.on('error', (err) => reject(err));
+    req.write(body);
+    req.end();
+  });
+}
+
+function extractOpenAIText(apiData) {
+  if (typeof apiData?.output_text === 'string' && apiData.output_text.trim()) {
+    return apiData.output_text.trim();
+  }
+  const out = [];
+  const outputItems = Array.isArray(apiData?.output) ? apiData.output : [];
+  for (const item of outputItems) {
+    const contentItems = Array.isArray(item?.content) ? item.content : [];
+    for (const content of contentItems) {
+      if (content?.type === 'output_text' && typeof content?.text === 'string') {
+        out.push(content.text);
+      }
+    }
+  }
+  return out.join('\n').trim();
+}
+
+function buildAiSystemPrompt(mode, language) {
+  const isEnglish = String(language || '').toLowerCase() === 'english';
+  const common = [
+    'You are BookMySalon AI Assistant.',
+    isEnglish
+      ? 'Respond only in simple English.'
+      : 'केवल शुद्ध देवनागरी हिंदी में उत्तर दो। रोमन हिंदी का उपयोग मत करो।',
+    'Keep answers short, practical, and step-by-step.',
+    'Use numbered steps when useful.',
+    'If user is unclear, ask one short follow-up question.',
+    'Explain technical terms in simple language.',
+    'Avoid unsafe or false claims.'
+  ].join(' ');
+
+  if (mode === 'owner') {
+    return [
+      common,
+      'Audience: Salon owner.',
+      'Registration flow ke facts strict follow karo: register page, details fill, location verify, WhatsApp verify flow, dashboard open.',
+      'OTP verification ka दावा mat karo kyunki current flow WhatsApp verify based hai.',
+      'Auto location kabhi galat ho sakti hai, isliye owner ko city/pincode/coordinates manually verify karne ko bolo.',
+      'Focus: booking badhana, repeat customer badhana, profile optimization, reviews, offers, staffing, slot planning.',
+      'Google Maps ke fayde ko proactively samjhao: nearby discoverability, trust, direction accuracy, walk-in growth, lower drop-off.',
+      'Owner ko motivate karo ki accurate latitude-longitude set kare aur business profile complete rakhe.',
+      'BookMySalon flow ke examples do: register, dashboard, booking-open, slots, subscription, nearby listing.'
+    ].join(' ');
+  }
+
+  return [
+    common,
+    'Audience: customer/user jo salon booking karna chahta hai.',
+    'Focus: nearby salons, booking steps, slot selection, kya expect karein, cancellation/retry guidance.',
+    'Helpful tone rakho, but concise raho.',
+    'Jab user service details puchhe to bolo ki final service details salon se confirm kare.'
+  ].join(' ');
+}
 
 function requireAdminKey(req, res, next) {
   const incoming = String(
@@ -608,7 +1172,7 @@ app.post('/api/send-whatsapp-welcome', async (req, res) => {
   };
 
   try {
-    // Cost-optimized path: send only QR image when allowed.
+    // Lean path: send only QR image when allowed.
     const imageResult = await sendImage();
 
     return res.json({
@@ -670,17 +1234,21 @@ app.post('/api/register-salon', (req, res) => {
     state,
     pincode,
     services,
+    karigars,
     bookingUrl,
     dashboardUrl,
     latitude,
     longitude,
     baseUrl
   } = req.body || {};
+  const businessType = String(req.body?.businessType || 'salon').toLowerCase() === 'beauty_parlour' ? 'beauty_parlour' : 'salon';
 
   const cleanOwnerPhone = normalizePhoneKey(ownerPhone).slice(-10);
   const cleanPincode = String(pincode || '').replace(/\D/g, '').slice(0, 6);
   const latitudeNum = parseCoordinate(latitude);
   const longitudeNum = parseCoordinate(longitude);
+  const normalizedServices = normalizeServiceList(services);
+  const normalizedKarigars = normalizeKarigarList(karigars, 2);
   const locationParts = [address, city, state, cleanPincode].filter(Boolean);
   const locationText = String(location || locationParts.join(', ') || '').trim();
   const locationKey = normalizeLocationKey([address, city, state, cleanPincode]);
@@ -689,15 +1257,20 @@ app.post('/api/register-salon', (req, res) => {
     return res.json({ success: false, msg: 'Salon name, owner name, email, city, state and valid WhatsApp number required.' });
   }
 
-  const existingSalon = findExistingSalonByOwnerPhone(cleanOwnerPhone) || findExistingSalonByLocation(locationKey);
+  const existingSalon = Object.values(salonRegistry).find((item) => {
+    const itemType = String(item?.businessType || 'salon').toLowerCase() === 'beauty_parlour' ? 'beauty_parlour' : 'salon';
+    if (itemType !== businessType) return false;
+    return String(item?.ownerPhone || '').slice(-10) === cleanOwnerPhone || (locationKey && item?.locationKey === locationKey);
+  }) || null;
   if (existingSalon) {
     const existingSubscription = getSalonSubscriptionSnapshot(existingSalon);
+    const typeLabel = businessType === 'beauty_parlour' ? 'Beauty Parlour' : 'Salon';
     return res.json({
       success: false,
       code: 'already_registered',
       msg: existingSubscription.isActive
-        ? `Ye WhatsApp number pehle se ${existingSalon.salonId} ke saath registered hai. Naya free trial nahi milega.`
-        : `Aapka salon ${existingSalon.salonId} pehle se registered hai. 7 din ka free trial khatam ho chuka hai. Subscription activate karaiye.`,
+        ? `Ye WhatsApp number pehle se ${typeLabel} ${existingSalon.salonId} ke saath registered hai. Naya free trial nahi milega.`
+        : `Aapka ${typeLabel} ${existingSalon.salonId} pehle se registered hai. 7 din ka free trial khatam ho chuka hai. Subscription activate karaiye.`,
       salon: buildPublicSalonData(existingSalon)
     });
   }
@@ -706,10 +1279,11 @@ app.post('/api/register-salon', (req, res) => {
   const urls = buildSalonUrls(baseUrl, salonId);
   const nowIso = new Date().toISOString();
 
-  salons.push({ name, email, phone, location: locationText, services });
+  salons.push({ name, email, phone, location: locationText, services: normalizedServices, karigars: normalizedKarigars, businessType });
   salonRegistry[salonId] = {
     salonId,
     salonName: name,
+    businessType,
     ownerName,
     ownerPhone: cleanOwnerPhone,
     email,
@@ -722,7 +1296,8 @@ app.post('/api/register-salon', (req, res) => {
     latitude: latitudeNum,
     longitude: longitudeNum,
     locationKey,
-    services: Array.isArray(services) ? services : [],
+    services: normalizedServices,
+    karigars: normalizedKarigars,
     bookingUrl: bookingUrl || urls.bookingUrl,
     dashboardUrl: dashboardUrl || urls.dashboardUrl,
     registeredAt: nowIso,
@@ -746,7 +1321,7 @@ app.post('/api/register-salon', (req, res) => {
 
   return res.json({
     success: true,
-    msg: 'Salon registered successfully. 7-day free trial started.',
+    msg: `${businessType === 'beauty_parlour' ? 'Beauty Parlour' : 'Salon'} registered successfully. 7-day free trial started.`,
     salon: buildPublicSalonData(salonRegistry[salonId])
   });
 });
@@ -809,9 +1384,12 @@ app.get('/api/nearby-salons', (req, res) => {
   const userState = normalizeText(req.query.state);
   const userPincode = String(req.query.pincode || '').replace(/\D/g, '').slice(0, 6);
   const activeOnly = String(req.query.activeOnly || 'false').toLowerCase() === 'true';
+  const businessType = String(req.query.businessType || 'all').toLowerCase();
 
   const records = Object.values(salonRegistry)
     .map((salon) => {
+      const salonType = String(salon.businessType || 'salon').toLowerCase() === 'beauty_parlour' ? 'beauty_parlour' : 'salon';
+      if (businessType !== 'all' && businessType !== salonType) return null;
       const subscription = getSalonSubscriptionSnapshot(salon);
       if (activeOnly && !subscription.isActive) return null;
 
@@ -855,6 +1433,7 @@ app.get('/api/nearby-salons', (req, res) => {
   return res.json({
     success: true,
     total: records.length,
+    businessType,
     radiusKm,
     hasUserGeo: userLat != null && userLng != null,
     salons: records
@@ -945,6 +1524,21 @@ app.post('/api/admin/salon-location/update', requireAdminKey, (req, res) => {
   });
 });
 
+// Change admin key
+app.post('/api/admin/change-key', requireAdminKey, (req, res) => {
+  const newKey = String(req.body?.newKey || '').trim();
+  if (!newKey || newKey.length < 6) {
+    return res.status(400).json({ success: false, msg: 'Nai key kam se kam 6 characters ki honi chahiye' });
+  }
+  try {
+    fs.writeFileSync(ADMIN_KEY_FILE, JSON.stringify({ key: newKey }), 'utf8');
+    ADMIN_PANEL_KEY = newKey;
+    return res.json({ success: true, msg: 'Admin key change ho gayi!' });
+  } catch (e) {
+    return res.status(500).json({ success: false, msg: 'Key save nahi ho sake: ' + e.message });
+  }
+});
+
 app.post('/api/admin/demo/cleanup', requireAdminKey, (req, res) => {
   if (!DEMO_TOOLS_ENABLED) {
     return res.status(403).json({ success: false, msg: 'Demo cleanup disabled. Enable ENABLE_DEMO_TOOLS=true only in local/demo environment.' });
@@ -960,6 +1554,207 @@ app.post('/api/admin/demo/cleanup', requireAdminKey, (req, res) => {
     ...result,
     dataNamespace: DATA_NAMESPACE || 'default'
   });
+});
+
+app.post('/api/ai/lead/request-verify', (req, res) => {
+  const name = String(req.body?.name || '').trim().slice(0, 60);
+
+  if (name.length < 2) {
+    return res.status(400).json({ success: false, msg: 'नाम सही भरें।' });
+  }
+
+  const rate = checkAiVerifyRateLimit(req);
+  if (!rate.allowed) {
+    return res.status(429).json({ success: false, msg: `बहुत ज़्यादा verify attempts हैं। ${rate.retryAfterSec} सेकंड बाद कोशिश करें।` });
+  }
+
+  pruneExpiredLeadVerifications();
+  const token = generateLeadVerifyToken();
+  const expiresAt = new Date(Date.now() + AI_VERIFY_EXPIRY_MS).toISOString();
+
+  aiLeadVerifications[token] = {
+    token,
+    name,
+    phone: '',
+    maskedPhone: '—',
+    createdAt: new Date().toISOString(),
+    expiresAt,
+    verifiedAt: null,
+    status: 'pending'
+  };
+  persistAiLeadVerifications();
+
+  const whatsappText = `VERIFY LEAD ${token}`;
+  const whatsappUrl = `https://wa.me/${BOOKMYSALON_WHATSAPP_NUMBER}?text=${encodeURIComponent(whatsappText)}`;
+  return res.json({
+    success: true,
+    token,
+    expiresAt,
+    whatsappText,
+    whatsappUrl,
+    maskedPhone: '—'
+  });
+});
+
+app.get('/api/ai/lead/verify-status/:token', (req, res) => {
+  pruneExpiredLeadVerifications();
+  const token = String(req.params?.token || '').trim().toUpperCase();
+  const item = aiLeadVerifications[token];
+  if (!item) {
+    return res.json({ success: false, status: 'missing', msg: 'Verification token नहीं मिला।' });
+  }
+  if (item.verifiedAt) {
+    return res.json({
+      success: true,
+      status: 'verified',
+      verifiedAt: item.verifiedAt,
+      maskedPhone: item.maskedPhone,
+      phone: normalizeLeadPhone(item.phone),
+      name: item.name
+    });
+  }
+  if (Date.parse(item.expiresAt || 0) < Date.now()) {
+    return res.json({ success: false, status: 'expired', msg: 'Verification link expire हो गया।' });
+  }
+  return res.json({ success: true, status: 'pending', expiresAt: item.expiresAt, maskedPhone: item.maskedPhone, name: item.name });
+});
+
+app.post('/api/ai/chat', async (req, res) => {
+  const mode = String(req.body?.mode || 'customer').trim().toLowerCase() === 'owner' ? 'owner' : 'customer';
+  const language = String(req.body?.language || 'hindi').trim().toLowerCase() === 'english' ? 'english' : 'hindi';
+  const message = String(req.body?.message || '').trim();
+  const history = Array.isArray(req.body?.history) ? req.body.history : [];
+  const salonContext = req.body?.salonContext && typeof req.body.salonContext === 'object' ? req.body.salonContext : null;
+  const lead = req.body?.lead && typeof req.body.lead === 'object' ? req.body.lead : null;
+
+  const rate = checkAiRateLimit(req);
+  if (!rate.allowed) {
+    return res.status(429).json({
+      success: false,
+      msg: `Zyada requests aa rahi hain. ${rate.retryAfterSec} sec baad try karo.`
+    });
+  }
+
+  if (!message) {
+    return res.status(400).json({ success: false, msg: 'Message required hai.' });
+  }
+  if (!OPENAI_API_KEY) {
+    return res.status(503).json({
+      success: false,
+      msg: 'AI temporarily unavailable. Server me OPENAI_API_KEY set karo.'
+    });
+  }
+
+  try {
+    const compactHistory = history
+      .slice(-8)
+      .map((item) => {
+        const role = String(item?.role || '').toLowerCase() === 'assistant' ? 'assistant' : 'user';
+        const text = String(item?.text || item?.content || '').trim().slice(0, 600);
+        return text ? { role, text } : null;
+      })
+      .filter(Boolean);
+
+    const contextLines = [];
+    if (salonContext?.salonId) contextLines.push(`Salon ID: ${salonContext.salonId}`);
+    if (salonContext?.salonName) contextLines.push(`Salon Name: ${salonContext.salonName}`);
+    if (salonContext?.city) contextLines.push(`City: ${salonContext.city}`);
+    if (salonContext?.hasLocation != null) contextLines.push(`Location Set: ${salonContext.hasLocation ? 'Yes' : 'No'}`);
+    if (salonContext?.subscriptionLabel) contextLines.push(`Subscription: ${salonContext.subscriptionLabel}`);
+    if (lead?.name) contextLines.push(`Lead Name: ${String(lead.name).trim().slice(0, 60)}`);
+    if (lead?.phone) contextLines.push(`Lead Phone: ${String(lead.phone).replace(/\D/g, '').slice(-10)}`);
+
+    trackQuestion(message);
+    if (aiAnalytics.totalChats % 5 === 0) persistAiAnalytics();
+
+    const finalUserMessage = contextLines.length
+      ? `Context:\n${contextLines.join('\n')}\n\nUser question: ${message}`
+      : message;
+
+    const input = [
+      {
+        role: 'system',
+        content: [{ type: 'input_text', text: buildAiSystemPrompt(mode, language) }]
+      },
+      ...compactHistory.map((item) => ({
+        role: item.role,
+        content: [{ type: 'input_text', text: item.text }]
+      })),
+      {
+        role: 'user',
+        content: [{ type: 'input_text', text: finalUserMessage }]
+      }
+    ];
+
+    const responseData = await callOpenAIResponsesApi({
+      model: OPENAI_MODEL,
+      input,
+      max_output_tokens: 380,
+      temperature: 0.5
+    });
+
+    const reply = extractOpenAIText(responseData) || 'Abhi clear response nahi bana. Aap question thoda short me dobara bhejo.';
+    return res.json({ success: true, mode, language, reply });
+  } catch (error) {
+    console.error('[AI Chat] Failed:', error.message);
+    return res.status(502).json({
+      success: false,
+      msg: 'AI response abhi nahi aa paaya. 1 min baad dobara try karo.'
+    });
+  }
+});
+
+app.get('/api/admin/ai-analytics', requireAdminKey, (req, res) => {
+  pruneExpiredLeadVerifications();
+
+  const topQuestions = Object.entries(aiAnalytics.topQuestions || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([question, count]) => ({ question, count }));
+
+  const verifiedLeads = (Array.isArray(aiAnalytics.latestLeads) ? aiAnalytics.latestLeads : []).map((item) => ({
+    key: `verified:${normalizeLeadPhone(item?.phone)}:${item?.capturedAt || ''}`,
+    name: String(item?.name || 'Unknown'),
+    phone: normalizeLeadPhone(item?.phone),
+    maskedPhone: String(item?.maskedPhone || maskLeadPhone(item?.phone)),
+    capturedAt: item?.capturedAt || null,
+    verified: item?.verified !== false
+  }));
+
+  const pendingLeads = Object.values(aiLeadVerifications || {}).map((item) => ({
+    key: `verify:${String(item?.token || '')}`,
+    name: String(item?.name || 'Unknown'),
+    phone: normalizeLeadPhone(item?.phone),
+    maskedPhone: String(item?.maskedPhone || maskLeadPhone(item?.phone)),
+    capturedAt: item?.verifiedAt || item?.createdAt || null,
+    verified: !!item?.verifiedAt
+  }));
+
+  const latestLeadMap = new Map();
+  for (const item of [...pendingLeads, ...verifiedLeads]) {
+    if (!item.phone && !item.name) continue;
+    if (!latestLeadMap.has(item.key)) latestLeadMap.set(item.key, item);
+  }
+
+  const latestLeads = Array.from(latestLeadMap.values())
+    .sort((a, b) => Date.parse(b.capturedAt || 0) - Date.parse(a.capturedAt || 0))
+    .slice(0, 50);
+
+  return res.json({
+    success: true,
+    totalChats: aiAnalytics.totalChats || 0,
+    leadEvents: aiAnalytics.leadEvents || 0,
+    topQuestions,
+    latestLeads
+  });
+});
+
+app.post('/api/admin/ai-leads/reset', requireAdminKey, (req, res) => {
+  const resetInfo = resetAiLeadState();
+  const msg = resetInfo.hadData
+    ? `AI reset complete. Cleared chats=${resetInfo.beforeTotalChats}, topQuestions=${resetInfo.beforeTopQuestions}, leads=${resetInfo.beforeLatestLeads}, leadEvents=${resetInfo.beforeLeadEvents}, pendingVerifications=${resetInfo.beforePendingTokens}.`
+    : 'AI reset skipped: reset karne ke liye koi AI data nahi tha.';
+  return res.json({ success: true, msg, resetInfo });
 });
 
 // ── WhatsApp Webhook ───────────────────────────────────────────────
@@ -995,6 +1790,42 @@ app.post('/webhook', async (req, res) => {
     const path = `/${WHATSAPP_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
     const match = msgText.match(/SALON-([A-Z0-9]{5})/i);
     const salonIdFromMessage = match ? `SALON-${match[1].toUpperCase()}` : null;
+    const verifyLeadMatch = msgText.match(/^VERIFY\s+LEAD\s+(BMS-[A-Z0-9]{6})$/i);
+
+    if (verifyLeadMatch) {
+      pruneExpiredLeadVerifications();
+      const token = String(verifyLeadMatch[1] || '').toUpperCase();
+      const item = aiLeadVerifications[token];
+      const senderPhone = normalizePhoneKey(fromPhone).slice(-10);
+
+      if (!item) {
+        await sendWhatsAppText(path, fromPhone, 'यह verification token नहीं मिला या expire हो गया है। वेबसाइट पर जाकर फिर से WhatsApp verify करें।');
+        return;
+      }
+      if (item.verifiedAt) {
+        await sendWhatsAppText(path, fromPhone, 'यह lead पहले से verify हो चुकी है। अब आप वेबसाइट पर वापस जाकर chat जारी रख सकते हैं।');
+        return;
+      }
+      if (Date.parse(item.expiresAt || 0) < Date.now()) {
+        delete aiLeadVerifications[token];
+        persistAiLeadVerifications();
+        await sendWhatsAppText(path, fromPhone, 'यह verification expire हो गया। वेबसाइट से फिर से verify शुरू करें।');
+        return;
+      }
+      if (item.phone && item.phone !== senderPhone) {
+        await sendWhatsAppText(path, fromPhone, 'यह token किसी और WhatsApp नंबर से verify हो चुका है। वेबसाइट से नया verify token बनाएं।');
+        return;
+      }
+
+      item.phone = senderPhone;
+      item.maskedPhone = maskLeadPhone(senderPhone);
+      item.verifiedAt = new Date().toISOString();
+      item.status = 'verified';
+      persistAiLeadVerifications();
+      trackLeadEvent({ name: item.name, phone: item.phone }, { headers: {}, ip: fromPhone, connection: { remoteAddress: fromPhone } });
+      await sendWhatsAppText(path, fromPhone, 'Lead verify हो गई है। अब आप वेबसाइट पर वापस जाकर chat इस्तेमाल कर सकते हैं।');
+      return;
+    }
 
     if (/^(MY\s+SALONS|LIST\s+SALONS|SHOW\s+SALONS)$/i.test(upperText)) {
       const saved = getSavedSalonsForCustomer(fromPhone);
@@ -1233,15 +2064,36 @@ app.get('/api/booking-state/:salonId', (req, res) => {
   if (bs && bs.date !== today) {
     bs.isOpen = false;
     bs.slots = [];
+    bs.bookings = [];
     bs.karigar = 0;
+    bs.karigars = normalizeKarigarList(salon?.karigars, 0);
+    bs.bufferMin = BOOKING_BUFFER_MIN;
     bs.date = today;
     bs.closeReason = 'auto-midnight';
     persistBookingStates();
   }
 
   if (!bs) {
-    return res.json({ success: true, salonId, isOpen: false, slots: [], karigar: 0, date: today, subscription });
+    return res.json({
+      success: true,
+      salonId,
+      isOpen: false,
+      slots: [],
+      bookings: [],
+      karigar: 0,
+      karigars: normalizeKarigarList(salon?.karigars, 0),
+      date: today,
+      bufferMin: BOOKING_BUFFER_MIN,
+      subscription
+    });
   }
+
+  if (ensureBookingStateSchema(bs, salon)) {
+    bs.slots = rebuildLegacySlotsFromBookings(bs);
+    persistBookingStates();
+  }
+
+  bs.slots = rebuildLegacySlotsFromBookings(bs);
 
   res.json({ success: true, ...bs, subscription });
 });
@@ -1249,7 +2101,7 @@ app.get('/api/booking-state/:salonId', (req, res) => {
 // POST /api/booking-open  { salonId, karigar, openingTime, closingTime }
 app.post('/api/booking-open', (req, res) => {
   const { salonId, karigar, openingTime, closingTime } = req.body || {};
-  if (!salonId || !karigar || !openingTime || !closingTime) {
+  if (!salonId || !openingTime || !closingTime) {
     return res.json({ success: false, msg: 'Missing fields' });
   }
   const salon = salonRegistry[salonId];
@@ -1264,11 +2116,34 @@ app.post('/api/booking-open', (req, res) => {
     return res.json({ success: false, msg: 'Closing time must be after opening time' });
   }
 
+  const normalizedKarigars = normalizeKarigarList(req.body?.karigars, karigar || salon?.karigar || salon?.karigars?.length || 0);
+  const activeKarigars = normalizedKarigars.filter((item) => item.active !== false);
+  if (!activeKarigars.length) {
+    return res.json({ success: false, msg: 'At least one active karigar is required' });
+  }
+
   const today = getToday();
-  const slots = generateSlots(openingTime, closingTime, karigar);
-  bookingStates[salonId] = { salonId, isOpen: true, karigar, openingTime, closingTime, slots, date: today, closeReason: null };
+  const slots = generateSlots(openingTime, closingTime, activeKarigars.length);
+  bookingStates[salonId] = {
+    salonId,
+    isOpen: true,
+    karigar: activeKarigars.length,
+    karigars: normalizedKarigars,
+    openingTime,
+    closingTime,
+    bufferMin: BOOKING_BUFFER_MIN,
+    slots,
+    bookings: [],
+    date: today,
+    closeReason: null
+  };
+  if (salon) {
+    salon.karigars = normalizedKarigars;
+    salon.karigar = activeKarigars.length;
+    persistSalonRegistry(salonRegistry);
+  }
   persistBookingStates();
-  res.json({ success: true, slots, karigar, message: 'Booking opened' });
+  res.json({ success: true, slots, karigar: activeKarigars.length, karigars: normalizedKarigars, message: 'Booking opened' });
 });
 
 // POST /api/booking-close  { salonId }
@@ -1283,31 +2158,149 @@ app.post('/api/booking-close', (req, res) => {
   res.json({ success: true, message: 'Booking closed' });
 });
 
-// POST /api/book-slot  { salonId, time, customerName, customerPhone }
+// POST /api/book-slot  { salonId, startTime, endTime, customerName, customerPhone, durationMin, karigarId }
 app.post('/api/book-slot', (req, res) => {
-  const { salonId, time, customerName, customerPhone } = req.body || {};
+  const { salonId, customerName, customerPhone } = req.body || {};
+  const startTime = req.body?.startTime || req.body?.time;
+  const requestedRange = sanitizeBookingRange(startTime, req.body?.endTime, req.body?.durationMin, LEGACY_BOOKING_DURATION_MIN);
   const bs = bookingStates[salonId];
   const salon = salonRegistry[salonId];
   const subscription = getSalonSubscriptionSnapshot(salon);
   if (!subscription.isActive) return res.json({ success: false, msg: subscription.customerMessage });
   if (!bs || !bs.isOpen) return res.json({ success: false, msg: 'Salon booking is closed' });
+  if (!requestedRange) return res.json({ success: false, msg: 'Invalid start/end time' });
 
-  const slot = bs.slots.find(s => s.time === time);
-  if (!slot) return res.json({ success: false, msg: 'Slot not found' });
-  if (slot.booked >= slot.capacity) return res.json({ success: false, msg: 'Slot is full' });
+  if (ensureBookingStateSchema(bs, salon)) {
+    bs.slots = rebuildLegacySlotsFromBookings(bs);
+  }
+
+  const dayStart = parseTimeToMinutes(bs.openingTime);
+  const dayEnd = parseTimeToMinutes(bs.closingTime);
+  if (dayStart == null || dayEnd == null || requestedRange.startMin < dayStart || requestedRange.endMin > dayEnd) {
+    return res.json({ success: false, msg: 'Selected time salon working hours ke bahar hai.' });
+  }
+
+  const allKarigars = activeKarigarsFromState(bs, salon).filter((item) => item.active !== false);
+  if (!allKarigars.length) return res.json({ success: false, msg: 'No active karigar available' });
+
+  const selectedKarigarId = String(req.body?.karigarId || 'ANY').trim().toUpperCase() || 'ANY';
+  const targetKarigars = selectedKarigarId === 'ANY'
+    ? allKarigars
+    : allKarigars.filter((item) => item.karigarId === selectedKarigarId);
+
+  if (!targetKarigars.length) return res.json({ success: false, msg: 'Selected karigar not available' });
+
+  const bookings = Array.isArray(bs.bookings) ? bs.bookings : [];
+  const bufferedRequested = {
+    startMin: requestedRange.startMin,
+    endMin: requestedRange.endMin + BOOKING_BUFFER_MIN
+  };
 
   // 1 booking per phone per day per salon
-  const alreadyToday = bs.slots.some(s =>
-    s.bookings && s.bookings.some(b => b.phone === customerPhone)
-  );
+  const cleanPhone = String(customerPhone || '').replace(/\D/g, '').slice(-10);
+  const alreadyToday = bookings.some((entry) => String(entry?.phone || '').replace(/\D/g, '').slice(-10) === cleanPhone);
   if (alreadyToday) return res.json({ success: false, msg: 'Aapki aaj ki booking pehle se hai is salon mein. Kal dobara aayen! 🙏' });
 
-  slot.booked += 1;
-  slot.bookings = slot.bookings || [];
-  slot.bookings.push({ name: customerName, phone: customerPhone, bookedAt: new Date().toISOString() });
+  let assignedKarigar = null;
+  for (const karigarItem of targetKarigars) {
+    const hasConflict = bookings.some((entry) => {
+      const entryKarigar = String(entry?.karigarId || '').trim().toUpperCase();
+      if (entryKarigar && entryKarigar !== karigarItem.karigarId) return false;
+      const existingRange = resolveBookingRangeMinutes(entry);
+      if (!existingRange) return false;
+      const bufferedExisting = {
+        startMin: existingRange.startMin,
+        endMin: existingRange.endMin + BOOKING_BUFFER_MIN
+      };
+      return hasTimeOverlap(bufferedRequested, bufferedExisting);
+    });
+    if (!hasConflict) {
+      assignedKarigar = karigarItem;
+      break;
+    }
+  }
+
+  if (!assignedKarigar) {
+    return res.json({ success: false, msg: 'Selected time par koi karigar free nahi hai. Dusra slot chunein.' });
+  }
+
+  const bookingTime = new Date().toISOString();
+  const bookingRecord = {
+    bookingId: `BK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+    name: String(customerName || '').trim() || 'Customer',
+    phone: cleanPhone,
+    karigarId: assignedKarigar.karigarId,
+    karigarName: assignedKarigar.name,
+    startTime: requestedRange.startTime,
+    endTime: requestedRange.endTime,
+    durationMin: requestedRange.durationMin,
+    serviceName: String(req.body?.serviceName || '').slice(0, 80),
+    selectedServices: normalizeServiceList(req.body?.selectedServices),
+    createdAt: bookingTime
+  };
+
+  bs.bookings = bookings;
+  bs.bookings.push(bookingRecord);
+  bs.slots = rebuildLegacySlotsFromBookings(bs);
   persistBookingStates();
 
-  res.json({ success: true, message: `Slot ${time} booked for ${customerName}`, remaining: slot.capacity - slot.booked, salonId, time, customerName });
+  const remaining = allKarigars.length - bs.bookings.filter((entry) => {
+    const entryRange = resolveBookingRangeMinutes(entry);
+    if (!entryRange) return false;
+    return hasTimeOverlap(requestedRange, entryRange);
+  }).length;
+
+  res.json({
+    success: true,
+    message: `Slot ${requestedRange.startTime} - ${requestedRange.endTime} booked for ${customerName}`,
+    remaining: Math.max(0, remaining),
+    salonId,
+    startTime: requestedRange.startTime,
+    time: requestedRange.startTime,
+    endTime: requestedRange.endTime,
+    customerName,
+    durationMin: requestedRange.durationMin,
+    karigarId: assignedKarigar.karigarId,
+    karigarName: assignedKarigar.name,
+    bufferMin: BOOKING_BUFFER_MIN
+  });
+});
+
+// ── Customer Feedback ─────────────────────────────────────────────
+// POST /api/feedback  { name, phone, message }
+app.post('/api/feedback', (req, res) => {
+  const { name, phone, message } = req.body || {};
+  const cleanName = String(name || '').trim().slice(0, 60);
+  const cleanPhone = String(phone || '').replace(/\D/g, '').slice(-10);
+  const cleanMsg = String(message || '').trim().slice(0, 500);
+  if (!cleanName || cleanName.length < 2) return res.json({ success: false, msg: 'Naam sahi likho.' });
+  if (cleanPhone.length !== 10) return res.json({ success: false, msg: 'Phone 10 digits ka hona chahiye.' });
+  if (!cleanMsg || cleanMsg.length < 5) return res.json({ success: false, msg: 'Message bahut chota hai.' });
+  const list = loadFeedback();
+  list.push({ name: cleanName, phone: cleanPhone, message: cleanMsg, submittedAt: new Date().toISOString() });
+  saveFeedback(list);
+  console.log(`[Feedback] New from ${cleanName} (${cleanPhone})`);
+  return res.json({ success: true, msg: 'Shukriya! Sujhav mil gaya.' });
+});
+
+// GET /api/admin/feedback
+app.get('/api/admin/feedback', requireAdminKey, (req, res) => {
+  const list = loadFeedback();
+  return res.json({ success: true, feedback: list.slice().reverse().slice(0, 200) });
+});
+
+// POST /api/admin/feedback/reset
+app.post('/api/admin/feedback/reset', requireAdminKey, (req, res) => {
+  const list = loadFeedback();
+  const clearedCount = Array.isArray(list) ? list.length : 0;
+  saveFeedback([]);
+  return res.json({
+    success: true,
+    msg: clearedCount > 0
+      ? `Sujhav reset complete. Cleared feedback=${clearedCount}.`
+      : 'Sujhav reset skipped: clear karne ke liye koi feedback data nahi tha.',
+    resetInfo: { clearedCount }
+  });
 });
 
 // Static site

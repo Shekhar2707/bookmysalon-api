@@ -1,3 +1,17 @@
 .env
 node_modules/
+
+# Sensitive — never push
+admin-key.json
+cg-control-7x9k-admin.html
+
+# Live data — stays on server only
+data/
+data-*/
+
+# Backups and deploy zips
+backup_*/
+*.zip
+
+# Misc
 kal-website-history.txt

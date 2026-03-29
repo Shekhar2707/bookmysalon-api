@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <!-- Main landing page -->
+  <url>
+    <loc>https://bookmysalon.site/</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- Salons listing / Find Salon -->
+  <url>
+    <loc>https://bookmysalon.site/salons.html</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Owner Registration -->
+  <url>
+    <loc>https://bookmysalon.site/register.html</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Owner Dashboard -->
+  <url>
+    <loc>https://bookmysalon.site/dashboard.html</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Help & FAQ -->
+  <url>
+    <loc>https://bookmysalon.site/faq.html</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <!-- Business Setup Guide (Hindi/English) -->
+  <url>
+    <loc>https://bookmysalon.site/google-guide.html</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!--
+    Dynamic Salon Profile Pages (salon.html?id=SALON_ID)
+    These are served as query-parameter URLs. Google can index them if linked.
+    Example placeholders — add real Salon IDs below as salons register.
+
+    <url>
+      <loc>https://bookmysalon.site/salon.html?id=SALON_ID_1</loc>
+      <lastmod>2026-03-30</lastmod>
+      <changefreq>weekly</changefreq>
+      <priority>0.8</priority>
+    </url>
+
+    Recommended: When you have many salons, generate this sitemap dynamically
+    from your API (GET /api/salons) and serve it at /sitemap.xml via api.js.
+  -->
+
+</urlset>

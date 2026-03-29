@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BookMySalon - Salon Dashboard</title>
+    <title>BookMySalon - Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
@@ -23,6 +23,7 @@
             <h1 class="text-xl font-extrabold tracking-wide">💇 Salon Dashboard</h1>
             <div id="statusBadge" class="hidden px-4 py-1.5 rounded-full text-sm font-bold"></div>
             <div class="flex items-center gap-3">
+                <a href="faq.html" class="text-xs text-cyan-300 hover:text-cyan-200">FAQ</a>
                 <a href="admin.html" class="text-xs text-cyan-300 hover:text-cyan-200">Admin</a>
                 <button onclick="window.location.href='register.html'" class="text-xs text-gray-400 hover:text-white">← Register</button>
             </div>
@@ -49,7 +50,7 @@
             <!-- Salon Info Bar -->
             <div class="rounded-2xl border border-white/10 bg-white/5 p-4 flex flex-wrap gap-4 items-center justify-between">
                 <div>
-                    <p class="text-xs text-gray-400">Salon</p>
+                    <p id="dbBizTypeLabel" class="text-xs text-gray-400">Salon</p>
                     <p id="dbSalonName" class="text-lg font-extrabold">—</p>
                 </div>
                 <div>
@@ -64,6 +65,14 @@
                     <p class="text-xs text-gray-400">Today</p>
                     <p id="dbToday" class="font-semibold">—</p>
                 </div>
+            </div>
+
+            <div class="rounded-2xl border border-cyan-300/30 bg-cyan-500/10 p-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <p class="text-sm font-bold text-cyan-200">Google Website Setup Guide</p>
+                    <p class="text-xs text-cyan-100/90">Salon aur Beauty Parlour owners ke liye Hindi + English walkthrough.</p>
+                </div>
+                <a href="google-guide.html" target="_blank" class="rounded-xl bg-cyan-500 hover:bg-cyan-400 px-4 py-2 text-sm font-bold text-gray-950 transition">Open Guide ↗</a>
             </div>
 
             <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -119,6 +128,15 @@
                             <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-gray-400 text-sm">30 minutes (fixed)</div>
                         </div>
                     </div>
+
+                    <div class="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <p class="text-sm font-semibold text-gray-200">Karigar Details</p>
+                            <p class="text-xs text-gray-400">Name + Active toggle</p>
+                        </div>
+                        <div id="karigarEditorRows" class="space-y-2"></div>
+                    </div>
+
                     <!-- Preview -->
                     <div id="slotPreview" class="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-gray-300 hidden">
                         <p id="slotPreviewText"></p>
@@ -136,6 +154,7 @@
                             <span class="pulse-green text-xl">🟢</span>
                             <span class="text-emerald-200 font-bold">Booking is OPEN</span>
                         </div>
+                        <p id="activeKarigarNames" class="text-xs text-gray-300">—</p>
                         <div class="grid grid-cols-3 gap-3 text-center text-xs mt-3">
                             <div class="bg-white/10 rounded-lg p-2">
                                 <p class="text-gray-400">Karigar</p>
@@ -219,6 +238,7 @@
         longitude: null,
         isOpen: false,
         karigar: 0,
+        karigars: [],
         openingTime: '10:00',
         closingTime: '21:00',
         slots: [],      // [{time, capacity, booked}]
@@ -256,9 +276,88 @@
         // Preview update on input change
         ['karigarCount','openingTime','closingTime'].forEach(id => {
             const el = document.getElementById(id);
-            if (el) el.addEventListener('input', updateSlotPreview);
+            if (el) el.addEventListener('input', syncKarigarRowsAndPreview);
         });
     });
+
+    function getDefaultKarigarList(count) {
+        const total = Math.max(1, parseInt(count, 10) || 1);
+        return Array.from({ length: total }, (_, idx) => ({
+            karigarId: `K${idx + 1}`,
+            name: `Karigar ${idx + 1}`,
+            active: true
+        }));
+    }
+
+    function normalizeKarigarDraft(karigars, fallbackCount) {
+        const source = Array.isArray(karigars) ? karigars : [];
+        const out = source.map((item, idx) => {
+            const karigarId = String(item && item.karigarId ? item.karigarId : `K${idx + 1}`).trim().toUpperCase() || `K${idx + 1}`;
+            const name = String(item && item.name ? item.name : `Karigar ${idx + 1}`).trim() || `Karigar ${idx + 1}`;
+            return { karigarId, name, active: item && item.active !== false };
+        });
+
+        if (!out.length) return getDefaultKarigarList(fallbackCount);
+        return out;
+    }
+
+    function collectKarigarsFromOpenForm() {
+        const rows = Array.from(document.querySelectorAll('#karigarEditorRows .karigar-row'));
+        if (!rows.length) return getDefaultKarigarList(parseInt(document.getElementById('karigarCount').value, 10) || 1);
+
+        return rows.map((row, idx) => {
+            const nameInput = row.querySelector('.karigar-name-input');
+            const activeInput = row.querySelector('.karigar-active-input');
+            const id = String(row.getAttribute('data-karigar-id') || `K${idx + 1}`).trim().toUpperCase() || `K${idx + 1}`;
+            const name = String(nameInput && nameInput.value ? nameInput.value : '').trim() || `Karigar ${idx + 1}`;
+            return { karigarId: id, name, active: !!(activeInput && activeInput.checked) };
+        });
+    }
+
+    function renderKarigarEditorRows(karigars) {
+        const host = document.getElementById('karigarEditorRows');
+        if (!host) return;
+
+        const draft = normalizeKarigarDraft(karigars, parseInt(document.getElementById('karigarCount').value, 10) || 1);
+        function escK(s) { return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'); }
+        host.innerHTML = draft.map((item, idx) => `
+            <div class="karigar-row grid grid-cols-12 gap-2 items-center" data-karigar-id="${escK(item.karigarId)}">
+                <div class="col-span-2 text-xs text-gray-400 font-semibold">${escK(item.karigarId)}</div>
+                <input type="text" value="${escK(item.name)}" class="karigar-name-input col-span-7 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-400" placeholder="Karigar name" />
+                <label class="col-span-3 flex items-center justify-end gap-2 text-xs text-gray-300">
+                    <input type="checkbox" class="karigar-active-input" ${item.active ? 'checked' : ''} />
+                    Active
+                </label>
+            </div>
+        `).join('');
+
+        host.querySelectorAll('.karigar-name-input, .karigar-active-input').forEach((el) => {
+            el.addEventListener('input', updateSlotPreview);
+            el.addEventListener('change', updateSlotPreview);
+        });
+    }
+
+    function syncKarigarRowsAndPreview() {
+        const count = Math.max(1, parseInt(document.getElementById('karigarCount').value, 10) || 1);
+        const current = collectKarigarsFromOpenForm();
+        const next = [];
+
+        for (let i = 0; i < count; i += 1) {
+            const existing = current[i];
+            if (existing) {
+                next.push({
+                    karigarId: `K${i + 1}`,
+                    name: String(existing.name || `Karigar ${i + 1}`).trim() || `Karigar ${i + 1}`,
+                    active: existing.active !== false
+                });
+            } else {
+                next.push({ karigarId: `K${i + 1}`, name: `Karigar ${i + 1}`, active: true });
+            }
+        }
+
+        renderKarigarEditorRows(next);
+        updateSlotPreview();
+    }
 
     function getSalonIdFromUrl() {
         const params = new URLSearchParams(window.location.search);
@@ -347,6 +446,17 @@
             state.salonName = data.salon.salonName || state.salonName;
             state.ownerName = data.salon.ownerName || state.ownerName;
             state.subscription = data.salon.subscription || null;
+            const _bizType = data.salon.businessType === 'beauty_parlour' ? 'beauty_parlour' : 'salon';
+            const _bizLabel = data.salon.businessLabel || (_bizType === 'beauty_parlour' ? 'Beauty Parlour' : 'Salon');
+            const _isBeauty = _bizType === 'beauty_parlour';
+            document.title = 'BookMySalon - ' + _bizLabel + ' Dashboard';
+            const _h1 = document.querySelector('h1.text-xl.font-extrabold');
+            if (_h1) _h1.textContent = (_isBeauty ? '\uD83D\uDC84' : '\uD83D\uDC87') + ' ' + _bizLabel + ' Dashboard';
+            const _bizLbl = document.getElementById('dbBizTypeLabel');
+            if (_bizLbl) _bizLbl.textContent = _bizLabel;
+            state.karigars = Array.isArray(data.salon.karigars)
+                ? normalizeKarigarDraft(data.salon.karigars, data.salon.karigar || state.karigar || 1)
+                : normalizeKarigarDraft(state.karigars, state.karigar || 1);
             state.latitude = data.salon.latitude ?? null;
             state.longitude = data.salon.longitude ?? null;
             saveState();
@@ -457,7 +567,7 @@
     function showOpenForm() {
         document.getElementById('closedState').classList.add('hidden');
         document.getElementById('openForm').classList.remove('hidden');
-        updateSlotPreview();
+        syncKarigarRowsAndPreview();
     }
 
     function cancelOpenForm() {
@@ -466,13 +576,18 @@
     }
 
     function updateSlotPreview() {
-        const k = parseInt(document.getElementById('karigarCount').value) || 1;
+        const karigars = collectKarigarsFromOpenForm();
+        const activeKarigars = karigars.filter(item => item.active !== false);
+        const k = activeKarigars.length;
         const open = document.getElementById('openingTime').value || '10:00';
         const close = document.getElementById('closingTime').value || '21:00';
-        const slots = generateSlots(open, close, k);
+        const slots = k > 0 ? generateSlots(open, close, k) : [];
         const el = document.getElementById('slotPreview');
         const txt = document.getElementById('slotPreviewText');
-        if (slots.length > 0) {
+        if (!k) {
+            txt.textContent = 'At least 1 active karigar required.';
+            el.classList.remove('hidden');
+        } else if (slots.length > 0) {
             txt.textContent = `${slots.length} slots × ${k} karigar = ${slots.length * k} total seats`;
             el.classList.remove('hidden');
         } else {
@@ -481,23 +596,25 @@
     }
 
     function confirmOpenBooking() {
-        const k = parseInt(document.getElementById('karigarCount').value);
+        const karigars = collectKarigarsFromOpenForm();
+        const k = karigars.filter(item => item.active !== false).length;
         const open = document.getElementById('openingTime').value;
         const close = document.getElementById('closingTime').value;
 
-        if (!k || k < 1) { alert('Karigar count kam se kam 1 hona chahiye.'); return; }
+        if (!k || k < 1) { alert('At least 1 active karigar required.'); return; }
         if (!open || !close || open >= close) { alert('Closing time, opening time se baad hona chahiye.'); return; }
 
         fetch('/api/booking-open', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ salonId: state.salonId, karigar: k, openingTime: open, closingTime: close })
+            body: JSON.stringify({ salonId: state.salonId, karigar: k, karigars, openingTime: open, closingTime: close })
         })
         .then(r => r.json())
         .then(data => {
             if (!data.success) { alert(data.msg); return; }
             state.isOpen = true;
             state.karigar = k;
+            state.karigars = Array.isArray(data.karigars) ? data.karigars : karigars;
             state.openingTime = open;
             state.closingTime = close;
             state.slots = data.slots;
@@ -536,6 +653,7 @@
                 state.subscription = data.subscription || state.subscription;
                 state.isOpen   = data.isOpen;
                 state.karigar  = data.karigar  || 0;
+                state.karigars = Array.isArray(data.karigars) ? data.karigars : normalizeKarigarDraft(state.karigars, state.karigar || 1);
                 state.slots    = data.slots    || [];
                 state.openingTime = data.openingTime || '10:00';
                 state.closingTime = data.closingTime || '21:00';
@@ -623,6 +741,11 @@
             openState.classList.remove('hidden');
 
             document.getElementById('activeKarigar').textContent = state.karigar;
+            const activeNames = (Array.isArray(state.karigars) ? state.karigars : [])
+                .filter(item => item && item.active !== false)
+                .map(item => item.name || item.karigarId)
+                .join(', ');
+            document.getElementById('activeKarigarNames').textContent = activeNames || '—';
             document.getElementById('activeTotalSlots').textContent = state.slots.length;
             const totalBooked = state.slots.reduce((s,sl)=>s+sl.booked,0);
             document.getElementById('activeBookedCount').textContent = totalBooked;
@@ -662,9 +785,10 @@
                     const ph = raw.length >= 10 ? raw.slice(-10) : raw;
                     const displayPhone = ph ? `+91 ${ph.slice(0, 5)} ${ph.slice(5)}` : '—';
                     const waHref = ph ? `https://wa.me/91${ph}` : '#';
+                    const safeName = String(b.name || '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
                     return `<div class="mt-1 pt-1 border-t border-white/20 text-left">
-                        <p class="text-xs font-semibold truncate">👤 ${b.name || '—'}</p>
-                        <a href="${waHref}" target="_blank" class="text-xs text-green-300 hover:underline">💬 ${displayPhone}</a>
+                        <p class="text-xs font-semibold truncate">👤 ${safeName}</p>
+                        <a href="${waHref}" target="_blank" rel="noopener noreferrer" class="text-xs text-green-300 hover:underline">💬 ${displayPhone}</a>
                     </div>`;
                 }).join('')
                 : '';
@@ -688,5 +812,6 @@
         document.getElementById('sumKarigar').textContent = state.karigar || '—';
     }
     </script>
+    <script src="script.js"></script>
 </body>
 </html>

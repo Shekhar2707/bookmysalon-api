@@ -1,0 +1,16 @@
+# BookMySalon - robots.txt
+# Allow all search engines to crawl the full site
+
+User-agent: *
+Allow: /
+
+# Block internal admin panel from public indexing
+Disallow: /cg-control-7x9k-admin.html
+Disallow: /admin.html
+
+# Block raw data JSON files from indexing
+Disallow: /data/
+Disallow: /data-localdemo/
+
+# Sitemap location
+Sitemap: https://bookmysalon.site/sitemap.xml

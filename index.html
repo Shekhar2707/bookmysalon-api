@@ -3,7 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BookMySalon - Instant Salon Booking</title>
+    <title>BookMySalon - Instant Salon Booking Near You | India</title>
+    <meta name="description" content="Book salon and beauty parlour appointments instantly near you. Find top-rated salons, check availability, and book online with BookMySalon — trusted by salons across India.">
+    <meta name="keywords" content="salon booking, beauty parlour booking, book salon near me, online salon appointment, hair salon India, beauty salon online booking, BookMySalon">
+    <meta name="robots" content="index, follow">
+    <meta name="author" content="BookMySalon">
+    <link rel="canonical" href="https://bookmysalon.site/">
+
+    <!-- Open Graph / Social -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://bookmysalon.site/">
+    <meta property="og:title" content="BookMySalon - Instant Salon Booking Near You">
+    <meta property="og:description" content="Find and book top-rated salons and beauty parlours near you. Instant online booking, no waiting.">
+    <meta property="og:site_name" content="BookMySalon">
+
+    <!-- JSON-LD Structured Data: LocalBusiness + BeautySalon -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": ["LocalBusiness", "BeautySalon"],
+      "name": "BookMySalon",
+      "description": "Online salon and beauty parlour booking platform in India. Find salons near you, check availability, and book appointments instantly.",
+      "url": "https://bookmysalon.site/",
+      "logo": "https://bookmysalon.site/favicon.ico",
+      "areaServed": "IN",
+      "serviceType": ["Hair Salon", "Beauty Parlour", "Grooming"],
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://bookmysalon.site/salons.html",
+        "query-input": "required name=search_term_string"
+      },
+      "sameAs": [
+        "https://bookmysalon.site/"
+      ]
+    }
+    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -17,13 +52,27 @@
                 </div>
                 <h1 class="text-2xl font-bold">BookMySalon</h1>
             </div>
-            <div class="flex gap-4 items-center">
+            <!-- Desktop nav (hidden on mobile) -->
+            <div class="hidden md:flex gap-4 items-center">
                 <button onclick="scrollToSection('features')" class="hover:text-pink-400 transition">Features</button>
                 <button onclick="scrollToSection('cta')" class="hover:text-pink-400 transition">Get Started</button>
-                <a href="admin.html" class="text-sm text-cyan-300 hover:text-cyan-200 transition">Admin</a>
-                <a href="register.html" class="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-2 px-4 rounded-full text-sm transition transform hover:scale-105">
-                    🏪 Register Salon
-                </a>
+                <a href="faq.html" class="hover:text-cyan-300 transition">Help & FAQ</a>
+                <a href="google-guide.html" class="hover:text-cyan-300 transition font-semibold">Google Guide</a>
+                <a href="register.html?type=salon" class="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-2 px-4 rounded-full text-sm transition">🏪 Register Salon</a>
+                <a href="register.html?type=beauty_parlour" class="bg-gradient-to-r from-fuchsia-500 to-violet-600 hover:from-fuchsia-600 hover:to-violet-700 text-white font-bold py-2 px-4 rounded-full text-sm transition">💄 Register Beauty Parlour</a>
+            </div>
+            <!-- Hamburger button (mobile only) -->
+            <button id="hamburgerBtn" onclick="toggleMobileMenu()" class="md:hidden text-white text-2xl leading-none px-2 py-1 hover:text-pink-400 transition" aria-label="Open menu" style="background:none;border:none;min-height:unset;min-width:unset;">☰</button>
+        </div>
+        <!-- Mobile dropdown menu -->
+        <div id="mobileMenu" class="hidden md:hidden border-t border-gray-700 bg-gray-800 px-4 pb-4">
+            <div class="flex flex-col gap-2 pt-3">
+                <button onclick="scrollToSection('features'); toggleMobileMenu()" class="text-left w-full hover:text-pink-400 transition py-2" style="background:none;border:none;min-height:unset;">Features</button>
+                <button onclick="scrollToSection('cta'); toggleMobileMenu()" class="text-left w-full hover:text-pink-400 transition py-2" style="background:none;border:none;min-height:unset;">Get Started</button>
+                <a href="faq.html" class="hover:text-cyan-300 transition py-2 block">Help &amp; FAQ</a>
+                <a href="google-guide.html" class="hover:text-cyan-300 transition font-semibold py-2 block">Google Guide</a>
+                <a href="register.html?type=salon" class="block text-center bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-2 px-4 rounded-full text-sm transition">🏪 Register Salon</a>
+                <a href="register.html?type=beauty_parlour" class="block text-center bg-gradient-to-r from-fuchsia-500 to-violet-600 hover:from-fuchsia-600 hover:to-violet-700 text-white font-bold py-2 px-4 rounded-full text-sm transition">💄 Register Beauty Parlour</a>
             </div>
         </div>
     </nav>
@@ -47,8 +96,11 @@
 
             <!-- CTA Buttons -->
             <div class="flex flex-col md:flex-row gap-4 justify-center mb-12">
-                <button onclick="goToNearby()" class="bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-bold py-4 px-8 rounded-full text-lg transition transform hover:scale-105 shadow-lg">
+                <button onclick="goToNearbySalon()" class="bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-bold py-4 px-8 rounded-full text-lg transition transform hover:scale-105 shadow-lg">
                     📍 Find Nearby Salons
+                </button>
+                <button onclick="goToNearbyBeauty()" class="bg-gradient-to-r from-fuchsia-500 to-purple-600 hover:from-fuchsia-600 hover:to-purple-700 text-white font-bold py-4 px-8 rounded-full text-lg transition transform hover:scale-105 shadow-lg">
+                    💄 Find Nearby Beauty Parlours
                 </button>
                 <button onclick="openQRScanner()" class="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-bold py-4 px-8 rounded-full text-lg transition transform hover:scale-105 shadow-lg">
                     📱 Scan Salon QR
@@ -61,9 +113,15 @@
             <!-- Salon Owner CTA -->
             <div class="border border-white/20 rounded-2xl bg-white/5 p-6 max-w-xl mx-auto">
                 <p class="text-gray-300 mb-3 text-sm">Salon owner ho? Apna salon register karo aur customers se instant bookings pao.</p>
-                <a href="register.html" class="inline-block bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-3 px-8 rounded-full text-lg transition transform hover:scale-105 shadow-lg">
-                    🏪 Register Your Salon
-                </a>
+                <a href="google-guide.html" class="inline-block mb-3 rounded-full border border-cyan-300/50 bg-cyan-500/15 px-4 py-2 text-sm font-bold text-cyan-200 hover:bg-cyan-500/25 transition">📘 Google Website Guide (Hindi + English)</a>
+                <div class="flex flex-col md:flex-row gap-3 justify-center">
+                    <a href="register.html?type=salon" class="inline-block bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-3 px-8 rounded-full text-lg transition transform hover:scale-105 shadow-lg">
+                        🏪 Register Salon
+                    </a>
+                    <a href="register.html?type=beauty_parlour" class="inline-block bg-gradient-to-r from-fuchsia-500 to-violet-600 hover:from-fuchsia-600 hover:to-violet-700 text-white font-bold py-3 px-8 rounded-full text-lg transition transform hover:scale-105 shadow-lg">
+                        💄 Register Beauty Parlour
+                    </a>
+                </div>
             </div>
         </div>
     </section>
@@ -138,8 +196,11 @@
                 <button onclick="openQRScanner()" class="bg-white text-purple-600 hover:bg-gray-100 font-bold py-4 px-8 rounded-full text-lg transition transform hover:scale-105">
                     📱 Scan QR Code
                 </button>
-                <button onclick="goToNearby()" class="bg-purple-800 hover:bg-purple-900 text-white font-bold py-4 px-8 rounded-full text-lg transition transform hover:scale-105">
+                <button onclick="goToNearbySalon()" class="bg-purple-800 hover:bg-purple-900 text-white font-bold py-4 px-8 rounded-full text-lg transition transform hover:scale-105">
                     📍 Find Salons
+                </button>
+                <button onclick="goToNearbyBeauty()" class="bg-fuchsia-700 hover:bg-fuchsia-800 text-white font-bold py-4 px-8 rounded-full text-lg transition transform hover:scale-105">
+                    💄 Find Beauty Parlours
                 </button>
             </div>
         </div>
@@ -150,10 +211,25 @@
         <div class="max-w-6xl mx-auto text-center text-gray-400">
             <p class="font-semibold text-gray-200">BookMySalon by Chandrashekhar Gole</p>
             <p class="mt-2">Making salon booking instant and easy 💇‍♀️</p>
+            <p class="mt-2"><a href="faq.html" class="text-cyan-300 hover:text-cyan-200">Help & FAQ</a></p>
             <p class="mt-2 text-xs">&copy; 2024 BookMySalon. All rights reserved.</p>
         </div>
     </footer>
 
     <script src="script.js"></script>
+    <script>
+        function toggleMobileMenu() {
+            var menu = document.getElementById('mobileMenu');
+            var btn = document.getElementById('hamburgerBtn');
+            if (!menu) return;
+            if (menu.classList.contains('hidden')) {
+                menu.classList.remove('hidden');
+                btn.textContent = '✕';
+            } else {
+                menu.classList.add('hidden');
+                btn.textContent = '☰';
+            }
+        }
+    </script>
 </body>
 </html>

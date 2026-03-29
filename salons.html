@@ -14,9 +14,9 @@
             <button onclick="window.location.href='index.html'" class="text-2xl hover:text-pink-400 transition">
                 ← Back
             </button>
-            <h1 class="text-2xl font-bold">Nearby Salons</h1>
+            <h1 id="nearbyTitle" class="text-2xl font-bold">Nearby Salons</h1>
             <div class="flex items-center gap-4">
-                <a href="admin.html" class="text-sm text-cyan-300 hover:text-cyan-200 transition">Admin</a>
+                <a href="faq.html" class="text-sm text-cyan-300 hover:text-cyan-200 transition">FAQ</a>
                 <button onclick="sortSalons()" class="text-2xl hover:text-pink-400 transition" title="Sort by distance">
                     🔄
                 </button>
@@ -27,6 +27,10 @@
     <!-- Search and Filter -->
     <div class="bg-gray-800 py-4 px-4 sticky top-16 z-40">
         <div class="max-w-6xl mx-auto grid md:grid-cols-[1fr_auto_auto] gap-3">
+            <div class="md:col-span-3 grid sm:grid-cols-2 gap-2">
+                <button id="nearbySalonBtn" type="button" onclick="setNearbyType('salon')" class="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm font-bold">🏪 Find Near Salon</button>
+                <button id="nearbyBeautyBtn" type="button" onclick="setNearbyType('beauty_parlour')" class="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm font-bold">💄 Find Near Beauty Parlour</button>
+            </div>
             <input type="text" id="searchInput" placeholder="Search by salon/city/state..." class="w-full bg-gray-700 text-white rounded-lg p-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500" onkeyup="filterSalons()" />
             <select id="radiusSelect" class="bg-gray-700 text-white rounded-lg px-3 py-2" onchange="reloadNearby()">
                 <option value="3">3 km</option>
@@ -55,6 +59,44 @@
     <script>
         let nearbySalons = [];
         let userGeo = null;
+        let nearbyType = 'salon';
+        let activeFetchController = null;
+        let hasRenderedNearbyOnce = false;
+        let lastRenderedSignature = '';
+
+        function escapeHtml(str) {
+            return String(str == null ? '' : str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#x27;');
+        }
+
+        function setNearbyType(type, skipLoad) {
+            nearbyType = String(type || '').toLowerCase() === 'beauty_parlour' ? 'beauty_parlour' : 'salon';
+            const salonBtn = document.getElementById('nearbySalonBtn');
+            const beautyBtn = document.getElementById('nearbyBeautyBtn');
+            const title = document.getElementById('nearbyTitle');
+
+            if (title) title.textContent = nearbyType === 'beauty_parlour' ? 'Nearby Beauty Parlours' : 'Nearby Salons';
+
+            if (salonBtn) {
+                salonBtn.classList.toggle('bg-cyan-500', nearbyType === 'salon');
+                salonBtn.classList.toggle('text-gray-900', nearbyType === 'salon');
+                salonBtn.classList.toggle('border-cyan-300', nearbyType === 'salon');
+            }
+            if (beautyBtn) {
+                beautyBtn.classList.toggle('bg-fuchsia-500', nearbyType === 'beauty_parlour');
+                beautyBtn.classList.toggle('text-gray-900', nearbyType === 'beauty_parlour');
+                beautyBtn.classList.toggle('border-fuchsia-300', nearbyType === 'beauty_parlour');
+            }
+
+            const url = new URL(window.location.href);
+            url.searchParams.set('type', nearbyType);
+            window.history.replaceState({}, '', url.toString());
+            if (!skipLoad) loadNearby();
+        }
 
         function formatPhone(raw) {
             const d = String(raw || '').replace(/\D/g, '').slice(-10);
@@ -67,45 +109,86 @@
             if (el) el.textContent = text;
         }
 
+        function makeUniqueDisplayNames(list) {
+            const counts = {};
+            const serial = {};
+            (list || []).forEach((item) => {
+                const key = String(item?.salonName || 'Salon').trim().toLowerCase();
+                counts[key] = (counts[key] || 0) + 1;
+            });
+            return (list || []).map((item) => {
+                const baseName = String(item?.salonName || 'Salon').trim() || 'Salon';
+                const key = baseName.toLowerCase();
+                if ((counts[key] || 0) <= 1) {
+                    return { ...item, displayName: baseName };
+                }
+                serial[key] = (serial[key] || 0) + 1;
+                return { ...item, displayName: `${baseName} ${serial[key]}` };
+            });
+        }
+
+        function listSignature(list) {
+            return (list || []).map((item) => {
+                const sub = item?.subscription || {};
+                return [
+                    item?.salonId || '',
+                    item?.displayName || item?.salonName || '',
+                    sub?.status || '',
+                    sub?.activeUntil || '',
+                    item?.ownerPhone || ''
+                ].join('|');
+            }).join('~');
+        }
+
         function renderSalons(list) {
             const container = document.getElementById('salonsContainer');
             const noResults = document.getElementById('noResults');
             if (!container || !noResults) return;
 
             if (!list.length) {
+                // Empty result must always clear any old skeleton/cards.
+                lastRenderedSignature = '__EMPTY__';
                 container.innerHTML = '';
                 noResults.classList.remove('hidden');
                 return;
             }
 
+            const nextSig = listSignature(list);
+            if (nextSig === lastRenderedSignature) {
+                return;
+            }
+            lastRenderedSignature = nextSig;
+
             noResults.classList.add('hidden');
             container.innerHTML = list.map((salon) => {
                 const sub = salon.subscription || {};
                 const canBook = !!sub.isActive;
-                const distance = salon.distanceKm != null ? `${salon.distanceKm} km away` : 'Distance not available';
-                const location = [salon.city, salon.state, salon.pincode].filter(Boolean).join(', ') || salon.location || 'Location update pending';
+                const distance = salon.distanceKm != null ? `${escapeHtml(salon.distanceKm)} km away` : 'Distance not available';
+                const location = escapeHtml([salon.city, salon.state, salon.pincode].filter(Boolean).join(', ') || salon.location || 'Location update pending');
                 const badge = canBook
                     ? '<span class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-bold text-xs">Booking Active</span>'
                     : '<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full font-bold text-xs">Subscription Inactive</span>';
+                const salonIdSafe = escapeHtml(salon.salonId);
+                const waPhone = String(salon.ownerPhone || '').replace(/\D/g, '').slice(-10);
                 return `
                 <div class="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition salon-card">
                     <div class="bg-gradient-to-r from-pink-500 to-purple-500 h-24 relative"></div>
                     <div class="p-6 text-gray-900">
                         <div class="flex items-start justify-between gap-2 mb-2">
-                            <h3 class="text-xl font-bold">${salon.salonName || 'Salon'}</h3>
+                            <h3 class="text-xl font-bold">${escapeHtml(salon.displayName || salon.salonName || 'Salon')}</h3>
                             ${badge}
                         </div>
                         <div class="space-y-2 mb-4 text-sm text-gray-600">
                             <p>📍 ${distance}</p>
                             <p>🏙 ${location}</p>
                             <p>📞 ${formatPhone(salon.ownerPhone)}</p>
-                            <p class="text-xs ${canBook ? 'text-emerald-700' : 'text-red-700'}">${sub.label || ''}</p>
+                            <p class="text-xs ${canBook ? 'text-emerald-700' : 'text-red-700'}">${escapeHtml(sub.label || '')}</p>
                         </div>
                         <div class="flex gap-3">
-                            <button ${canBook ? '' : 'disabled'} onclick="goToSalonBooking('${salon.salonId}')" class="flex-1 ${canBook ? 'bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700' : 'bg-gray-400 cursor-not-allowed'} text-white font-bold py-3 rounded-lg transition">
+                            <button ${canBook ? '' : 'disabled'} onclick="goToSalonBooking('${salonIdSafe}')" class="flex-1 ${canBook ? 'bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700' : 'bg-gray-400 cursor-not-allowed'} text-white font-bold py-3 rounded-lg transition">
                                 ${canBook ? 'Book Now' : 'Unavailable'}
                             </button>
-                            <a href="https://wa.me/91${String(salon.ownerPhone || '').replace(/\D/g, '').slice(-10)}" target="_blank" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-900 font-bold py-3 rounded-lg transition text-center">💬 WhatsApp</a>
+                            <a href="https://wa.me/91${escapeHtml(waPhone)}" target="_blank" rel="noopener noreferrer" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-900 font-bold py-3 rounded-lg transition text-center">💬 WhatsApp</a>
                         </div>
                     </div>
                 </div>`;
@@ -141,32 +224,77 @@
             renderSalons(nearbySalons);
         }
 
+        function showSkeletonCards(n) {
+            const container = document.getElementById('salonsContainer');
+            const noResults = document.getElementById('noResults');
+            if (!container) return;
+            if (noResults) noResults.classList.add('hidden');
+            const card = `
+                <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+                    <div class="bg-gray-300 h-24"></div>
+                    <div class="p-6 space-y-3">
+                        <div class="h-5 bg-gray-200 rounded w-3/4"></div>
+                        <div class="h-4 bg-gray-200 rounded w-1/2"></div>
+                        <div class="h-4 bg-gray-200 rounded w-2/3"></div>
+                        <div class="h-4 bg-gray-200 rounded w-1/3"></div>
+                        <div class="flex gap-3 pt-2">
+                            <div class="h-10 bg-gray-200 rounded-lg flex-1"></div>
+                            <div class="h-10 bg-gray-200 rounded-lg flex-1"></div>
+                        </div>
+                    </div>
+                </div>`;
+            container.innerHTML = Array.from({ length: n }, () => card).join('');
+        }
+
         async function loadNearby() {
+            // Cancel any previous in-flight fetch
+            if (activeFetchController) {
+                activeFetchController.abort();
+            }
+            activeFetchController = new AbortController();
+            const signal = activeFetchController.signal;
+
+            const firstPaintLoad = !hasRenderedNearbyOnce && (!nearbySalons || !nearbySalons.length);
+            if (firstPaintLoad) {
+                showSkeletonCards(3);
+                setStatus('Nearby salons load ho rahe hain...');
+            } else {
+                setStatus('Nearby list refresh ho rahi hai...');
+            }
+
             try {
                 const radiusKm = document.getElementById('radiusSelect')?.value || '10';
                 const query = new URLSearchParams({
                     radiusKm,
                     limit: '60',
-                    activeOnly: 'false'
+                    activeOnly: 'false',
+                    businessType: nearbyType
                 });
                 if (userGeo && userGeo.lat != null && userGeo.lng != null) {
                     query.set('lat', String(userGeo.lat));
                     query.set('lng', String(userGeo.lng));
                 }
 
-                const res = await fetch('/api/nearby-salons?' + query.toString());
+                const res = await fetch('/api/nearby-salons?' + query.toString(), { signal });
+                if (signal.aborted) return;
                 const data = await res.json();
+                if (signal.aborted) return;
+
                 if (!data.success) {
                     setStatus('Nearby salons load nahi ho paaye.');
+                    if (!hasRenderedNearbyOnce) renderSalons([]);
                     return;
                 }
-                nearbySalons = data.salons || [];
+                nearbySalons = makeUniqueDisplayNames(data.salons || []);
                 setStatus(data.hasUserGeo
-                    ? `Found ${data.total} salons within ${data.radiusKm} km.`
-                    : `Location off hai. Showing ${data.total} salons by city/state fallback.`);
+                    ? `Found ${data.total} ${nearbyType === 'beauty_parlour' ? 'beauty parlours' : 'salons'} within ${data.radiusKm} km.`
+                    : `Location off hai. Showing ${data.total} ${nearbyType === 'beauty_parlour' ? 'beauty parlours' : 'salons'} by city/state fallback.`);
                 filterSalons();
+                hasRenderedNearbyOnce = true;
             } catch (e) {
+                if (e.name === 'AbortError') return;
                 setStatus('Network error. Please refresh.');
+                if (!hasRenderedNearbyOnce) renderSalons([]);
             }
         }
 
@@ -198,7 +326,9 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            getMyLocationAndLoad();
+            const params = new URLSearchParams(window.location.search);
+            setNearbyType(params.get('type') || 'salon', true);
+            loadNearby();
         });
     </script>
 
@@ -206,7 +336,7 @@
     <footer class="bg-gray-800 py-8 px-4 border-t border-gray-700 mt-12">
         <div class="max-w-6xl mx-auto text-center text-gray-400">
             <p class="font-semibold text-gray-200">BookMySalon by Chandrashekhar Gole</p>
-            <p class="mt-2 text-xs">&copy; 2024 BookMySalon. All rights reserved.</p>
+            <p class="mt-2 text-xs">&copy; 2026 BookMySalon. All rights reserved.</p>
         </div>
     </footer>
 </body>
