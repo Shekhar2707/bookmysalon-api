@@ -9,6 +9,7 @@ let selectedDate = null;
 let selectedTime = null;
 const SALON_WHATSAPP_NUMBER = '919209098349';
 let isRegistrationSubmitting = false;
+let registrationGeo = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -167,7 +168,6 @@ function confirmBooking() {
 📋 Service: ${selectedService}
 📅 Date: ${new Date(selectedDate).toLocaleDateString()}
 ⏰ Time: ${selectedTime}
-💰 Price: ₹${selectedPrice}
 
 ✅ Your booking is confirmed!
 You will receive a confirmation message shortly.
@@ -190,7 +190,7 @@ function bookViaWhatsApp() {
         return;
     }
 
-    const message = `Hi, I would like to book ${selectedService} on ${new Date(selectedDate).toLocaleDateString()} at ${selectedTime}. Price: ₹${selectedPrice}. Please confirm.`;
+    const message = `Hi, I would like to book ${selectedService} on ${new Date(selectedDate).toLocaleDateString()} at ${selectedTime}. Please confirm.`;
     const encodedMessage = encodeURIComponent(message);
     
     // WhatsApp Business API (replace with actual salon number)
@@ -409,6 +409,7 @@ function requestRegistrationLocation() {
     if (cityInput) cityInput.value = '';
     if (stateInput) stateInput.value = '';
     if (pincodeInput) pincodeInput.value = '';
+    registrationGeo = null;
 
     if (!navigator.geolocation) {
         if (status) status.textContent = 'Geolocation is not supported on this browser.';
@@ -436,6 +437,11 @@ function requestRegistrationLocation() {
             }
 
             if (status) status.textContent = 'Location captured. Finding address details...';
+            registrationGeo = {
+                latitude: Number(latitude.toFixed(6)),
+                longitude: Number(longitude.toFixed(6)),
+                accuracy: Math.round(accuracy || 0)
+            };
 
             reverseGeocodeLocation(latitude, longitude)
                 .then((locationData) => {
@@ -459,10 +465,12 @@ function requestRegistrationLocation() {
                     if (cityInput) cityInput.value = '';
                     if (stateInput) stateInput.value = '';
                     if (pincodeInput) pincodeInput.value = '';
+                    registrationGeo = null;
                     if (status) status.textContent = '⚠️ Address lookup failed. Please enter city, state and pincode manually.';
                 });
         },
         () => {
+            registrationGeo = null;
             if (status) status.textContent = 'Unable to fetch location. Please enter address manually.';
         },
         { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
@@ -504,56 +512,114 @@ async function handleSalonRegistrationSubmit(event) {
         registerBtn.textContent = 'Creating your salon profile...';
     }
 
-    // Generate unique salon ID first (needed for API call)
-    const randomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
-    const salonId = `SALON-${randomCode}`;
-    const bookingUrl = `${window.location.origin}/salon.html?id=${salonId}`;
-    const dashboardUrl = `${window.location.origin}/dashboard.html?id=${salonId}`;
-
-    let apiSuccess = false;
+    let responseData = null;
     try {
         const response = await fetch('/api/register-salon', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                salonId,
                 name: salonName,
                 ownerName,
                 email,
                 phone: `+91${number}`,
                 ownerPhone: number,
                 location: locationText || 'Not provided',
+                address,
+                city,
+                state,
+                pincode,
+                latitude: registrationGeo ? registrationGeo.latitude : null,
+                longitude: registrationGeo ? registrationGeo.longitude : null,
                 services: selectedServices,
-                bookingUrl,
-                dashboardUrl
+                baseUrl: window.location.origin
             })
         });
-        const data = await response.json();
-        apiSuccess = Boolean(data && data.success);
+        responseData = await response.json();
     } catch (error) {
-        apiSuccess = false;
+        responseData = null;
     }
-
-    // Store salon data globally for WhatsApp verify flow
-    window.currentSalonData = {
-        salonId: salonId,
-        salonName: salonName,
-        ownerName: ownerName,
-        ownerPhone: number,
-        bookingUrl: bookingUrl,
-        dashboardUrl: dashboardUrl
-    };
 
     const verifyCodeDisplay = document.getElementById('verifyCodeDisplay');
     const salonIdForMessage = document.getElementById('salonIdForMessage');
     const whatsappVerifyLink = document.getElementById('whatsappVerifyLink');
     const verifyCard = document.getElementById('whatsappVerifyCard');
     const form = document.getElementById('registrationForm');
+    const verifySubscriptionNote = document.getElementById('verifySubscriptionNote');
 
-    // Display salon ID with owner name
-    const displayText = `${salonId} (${ownerName})`;
+    if (!responseData) {
+        alert('Backend save fail ho gaya. Kripya dobara try karein. WhatsApp verify tabhi karein jab registration successfully save ho jaye.');
+        if (registerBtn) {
+            registerBtn.disabled = false;
+            registerBtn.textContent = 'Register Salon & Get Booking Link';
+        }
+        isRegistrationSubmitting = false;
+        return;
+    }
+
+    if (!responseData.success && responseData.code === 'already_registered' && responseData.salon) {
+        const existingSalon = responseData.salon;
+        window.currentSalonData = {
+            salonId: existingSalon.salonId,
+            salonName: existingSalon.salonName,
+            ownerName: existingSalon.ownerName,
+            ownerPhone: number,
+            bookingUrl: existingSalon.bookingUrl,
+            dashboardUrl: existingSalon.dashboardUrl,
+            subscription: existingSalon.subscription || null
+        };
+
+        if (existingSalon.subscription && existingSalon.subscription.isActive) {
+            const displayText = `${existingSalon.salonId} (${existingSalon.ownerName || ownerName})`;
+            if (verifyCodeDisplay) verifyCodeDisplay.textContent = displayText;
+            if (salonIdForMessage) salonIdForMessage.textContent = displayText;
+            if (verifySubscriptionNote) verifySubscriptionNote.textContent = existingSalon.subscription.label || 'Free Trial Active';
+            if (whatsappVerifyLink) {
+                whatsappVerifyLink.href = '#';
+                whatsappVerifyLink.dataset.opening = '0';
+            }
+            if (form) form.classList.add('hidden');
+            if (verifyCard) {
+                verifyCard.classList.remove('hidden');
+                verifyCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+            alert(responseData.msg + ' Existing salon dashboard aur verify flow hi use karein.');
+        } else {
+            alert(responseData.msg + ' Naya salon create nahi hoga. Subscription activate karaiye.');
+        }
+
+        if (registerBtn) {
+            registerBtn.disabled = false;
+            registerBtn.textContent = 'Register Salon & Get Booking Link';
+        }
+        isRegistrationSubmitting = false;
+        return;
+    }
+
+    if (!responseData.success || !responseData.salon) {
+        alert(responseData.msg || 'Registration save nahi hua. Kripya dobara try karein.');
+        if (registerBtn) {
+            registerBtn.disabled = false;
+            registerBtn.textContent = 'Register Salon & Get Booking Link';
+        }
+        isRegistrationSubmitting = false;
+        return;
+    }
+
+    const savedSalon = responseData.salon;
+    window.currentSalonData = {
+        salonId: savedSalon.salonId,
+        salonName: savedSalon.salonName,
+        ownerName: savedSalon.ownerName,
+        ownerPhone: number,
+        bookingUrl: savedSalon.bookingUrl,
+        dashboardUrl: savedSalon.dashboardUrl,
+        subscription: savedSalon.subscription || null
+    };
+
+    const displayText = `${savedSalon.salonId} (${savedSalon.ownerName || ownerName})`;
     if (verifyCodeDisplay) verifyCodeDisplay.textContent = displayText;
     if (salonIdForMessage) salonIdForMessage.textContent = displayText;
+    if (verifySubscriptionNote) verifySubscriptionNote.textContent = savedSalon.subscription?.label || '7-day Free Trial Started';
     
     if (whatsappVerifyLink) {
         whatsappVerifyLink.href = '#';
@@ -566,9 +632,7 @@ async function handleSalonRegistrationSubmit(event) {
         verifyCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    if (!apiSuccess) {
-        alert('Salon profile preview is generated, but backend save failed. Please retry after checking server.');
-    }
+    alert(responseData.msg || 'Salon save ho gaya. Ab WhatsApp verify button se same saved salon ID verify karein.');
 
     if (registerBtn) {
         registerBtn.disabled = false;

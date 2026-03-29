@@ -26,8 +26,8 @@
                 <div>
                     <h2 id="salonName" class="text-3xl font-bold">Salon Name</h2>
                     <div class="flex items-center gap-2 mt-2">
-                        <span class="text-yellow-400">⭐ 4.8</span>
-                        <span class="text-gray-600">(124 reviews)</span>
+                        <span id="salonRatingDisplay" class="text-yellow-500 font-semibold hidden">⭐ —</span>
+                        <span id="salonReviewCount" class="text-gray-500 text-sm hidden"></span>
                     </div>
                 </div>
                 <div class="text-right">
@@ -38,17 +38,19 @@
             <div class="grid md:grid-cols-3 gap-4 text-sm">
                 <div>
                     <p class="text-gray-600">📍 Location</p>
-                    <p class="font-semibold">123 Main Street</p>
+                    <p id="salonLocation" class="font-semibold">123 Main Street</p>
                 </div>
                 <div>
-                    <p class="text-gray-600">📞 Phone</p>
-                    <p class="font-semibold">+91 98765 43210</p>
+                    <p class="text-gray-600">📞 WhatsApp</p>
+                    <p id="salonPhone" class="font-semibold text-gray-500">—</p>
+                    <a id="salonWhatsApp" href="#" target="_blank" class="text-green-600 text-sm font-semibold hover:underline hidden">💬 Message Salon</a>
                 </div>
                 <div>
                     <p class="text-gray-600">⏰ Hours</p>
                     <p class="font-semibold">9:00 AM - 8:00 PM</p>
                 </div>
             </div>
+            <div id="subscriptionNotice" class="hidden mt-5 rounded-xl p-4 text-sm font-semibold"></div>
         </div>
 
         <div class="grid md:grid-cols-2 gap-8">
@@ -57,41 +59,38 @@
                 <h3 class="text-2xl font-bold mb-6">Select Service</h3>
                 <div id="servicesContainer" class="space-y-4">
                     <!-- Services will be added by JavaScript -->
-                    <div class="bg-white rounded-2xl shadow-lg p-6 text-gray-900 cursor-pointer hover:shadow-xl transition service-card" onclick="selectService(this, 'Haircut', 500)">
+                    <div class="bg-white rounded-2xl shadow-lg p-6 text-gray-900 cursor-pointer hover:shadow-xl transition service-card" onclick="selectService(this, 'Haircut', 0)">
                         <div class="flex justify-between items-center">
                             <div>
                                 <h4 class="text-xl font-bold">Haircut</h4>
                                 <p class="text-gray-600">Professional haircut</p>
                             </div>
                             <div class="text-right">
-                                <p class="text-2xl font-bold text-pink-600">₹500</p>
-                                <p class="text-sm text-gray-600">30 min</p>
+                                <p class="text-sm text-gray-500">~30 min</p>
                             </div>
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-2xl shadow-lg p-6 text-gray-900 cursor-pointer hover:shadow-xl transition service-card" onclick="selectService(this, 'Beard Trim', 300)">
+                    <div class="bg-white rounded-2xl shadow-lg p-6 text-gray-900 cursor-pointer hover:shadow-xl transition service-card" onclick="selectService(this, 'Beard Trim', 0)">
                         <div class="flex justify-between items-center">
                             <div>
                                 <h4 class="text-xl font-bold">Beard Trim</h4>
                                 <p class="text-gray-600">Beard grooming & shaping</p>
                             </div>
                             <div class="text-right">
-                                <p class="text-2xl font-bold text-pink-600">₹300</p>
-                                <p class="text-sm text-gray-600">20 min</p>
+                                <p class="text-sm text-gray-500">~20 min</p>
                             </div>
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-2xl shadow-lg p-6 text-gray-900 cursor-pointer hover:shadow-xl transition service-card" onclick="selectService(this, 'Haircut + Beard', 750)">
+                    <div class="bg-white rounded-2xl shadow-lg p-6 text-gray-900 cursor-pointer hover:shadow-xl transition service-card" onclick="selectService(this, 'Haircut + Beard', 0)">
                         <div class="flex justify-between items-center">
                             <div>
                                 <h4 class="text-xl font-bold">Haircut + Beard</h4>
                                 <p class="text-gray-600">Complete grooming package</p>
                             </div>
                             <div class="text-right">
-                                <p class="text-2xl font-bold text-pink-600">₹750</p>
-                                <p class="text-sm text-gray-600">50 min</p>
+                                <p class="text-sm text-gray-500">~50 min</p>
                             </div>
                         </div>
                     </div>
@@ -109,40 +108,9 @@
                 </div>
 
                 <!-- Time Slots -->
+                <div id="slotStatusBanner" class="mb-4 hidden rounded-xl p-3 text-center text-sm font-semibold"></div>
                 <div id="timeSlotsContainer" class="grid grid-cols-2 gap-3">
-                    <!-- Time slots will be added by JavaScript -->
-                    <div class="bg-white rounded-lg shadow p-4 text-center text-gray-900 cursor-pointer hover:shadow-lg hover:bg-pink-50 transition time-slot" onclick="selectTimeSlot(this, '10:00')">
-                        <p class="font-bold text-lg">10:00</p>
-                        <p class="text-xs text-gray-600">Available</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 text-center text-gray-900 cursor-pointer hover:shadow-lg hover:bg-pink-50 transition time-slot" onclick="selectTimeSlot(this, '10:30')">
-                        <p class="font-bold text-lg">10:30</p>
-                        <p class="text-xs text-gray-600">Available</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 text-center text-gray-900 cursor-pointer hover:shadow-lg hover:bg-pink-50 transition time-slot" onclick="selectTimeSlot(this, '11:00')">
-                        <p class="font-bold text-lg">11:00</p>
-                        <p class="text-xs text-gray-600">Available</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 text-center text-gray-900 cursor-pointer hover:shadow-lg hover:bg-pink-50 transition time-slot" onclick="selectTimeSlot(this, '11:30')">
-                        <p class="font-bold text-lg">11:30</p>
-                        <p class="text-xs text-gray-600">Available</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 text-center text-gray-900 cursor-pointer hover:shadow-lg hover:bg-pink-50 transition time-slot" onclick="selectTimeSlot(this, '14:00')">
-                        <p class="font-bold text-lg">14:00</p>
-                        <p class="text-xs text-gray-600">Available</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 text-center text-gray-900 cursor-pointer hover:shadow-lg hover:bg-pink-50 transition time-slot" onclick="selectTimeSlot(this, '14:30')">
-                        <p class="font-bold text-lg">14:30</p>
-                        <p class="text-xs text-gray-600">Available</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 text-center text-gray-900 cursor-pointer hover:shadow-lg hover:bg-pink-50 transition time-slot" onclick="selectTimeSlot(this, '15:00')">
-                        <p class="font-bold text-lg">15:00</p>
-                        <p class="text-xs text-gray-600">Available</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-4 text-center text-gray-900 cursor-pointer hover:shadow-lg hover:bg-pink-50 transition time-slot" onclick="selectTimeSlot(this, '15:30')">
-                        <p class="font-bold text-lg">15:30</p>
-                        <p class="text-xs text-gray-600">Available</p>
-                    </div>
+                    <div class="col-span-2 text-center text-gray-400 py-8 text-sm">⏳ Slots load ho rahe hain...</div>
                 </div>
             </div>
         </div>
@@ -163,12 +131,18 @@
                     <span class="text-gray-600">Time:</span>
                     <span id="summaryTime" class="font-semibold">Not selected</span>
                 </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">Price:</span>
-                    <span id="summaryPrice" class="font-bold text-pink-600 text-lg">₹0</span>
+                <div class="hidden">
+                    <span id="summaryPrice"></span>
                 </div>
             </div>
 
+            <!-- Customer Info -->
+            <div class="space-y-3 mb-6">
+                <input id="customerName" type="text" placeholder="👤 Aapka naam (required)"
+                    class="w-full border border-gray-300 rounded-xl p-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-pink-400" />
+                <input id="customerPhone" type="tel" placeholder="📱 WhatsApp number (10 digits)" maxlength="10"
+                    class="w-full border border-gray-300 rounded-xl p-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-pink-400" />
+            </div>
             <!-- Buttons -->
             <div class="flex flex-col md:flex-row gap-4">
                 <button onclick="confirmBooking()" class="flex-1 bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-bold py-4 px-6 rounded-full text-lg transition transform hover:scale-105 shadow-lg">
@@ -185,6 +159,297 @@
         </div>
     </main>
 
+    <!-- Booking Confirmation Card -->
+    <div id="confirmationCard" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-gray-900 max-h-screen overflow-y-auto">
+            <div class="text-center mb-5">
+                <div class="text-5xl mb-2">✅</div>
+                <h3 class="text-2xl font-bold text-green-600">Booking Confirmed!</h3>
+                <p id="confirmMsg" class="text-gray-600 mt-2 text-sm">—</p>
+            </div>
+            <a id="calendarBtn" href="#" target="_blank"
+               class="flex items-center justify-center gap-2 w-full bg-blue-50 border border-blue-200 text-blue-700 font-bold py-3 px-4 rounded-xl mb-5 hover:bg-blue-100 transition text-sm">
+                📅 Google Calendar mein Add karo (15 min reminder)
+            </a>
+            <div id="ratingSection">
+                <p class="text-center font-semibold text-gray-700 mb-3">⭐ Salon ko rate karein:</p>
+                <div id="starButtons" class="flex justify-center gap-3 mb-3 text-3xl select-none">
+                    <span class="cursor-pointer star-btn" data-stars="1">☆</span>
+                    <span class="cursor-pointer star-btn" data-stars="2">☆</span>
+                    <span class="cursor-pointer star-btn" data-stars="3">☆</span>
+                    <span class="cursor-pointer star-btn" data-stars="4">☆</span>
+                    <span class="cursor-pointer star-btn" data-stars="5">☆</span>
+                </div>
+                <textarea id="reviewComment" placeholder="Koi comment (optional)..." rows="2"
+                    class="w-full border border-gray-300 rounded-xl p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-pink-400 mb-3"></textarea>
+                <button onclick="submitReview()" id="reviewBtn"
+                    class="w-full bg-pink-500 hover:bg-pink-600 text-white font-bold py-3 rounded-xl transition mb-2">
+                    ⭐ Rating Submit Karen
+                </button>
+                <p id="reviewMsg" class="text-center text-sm text-green-600 hidden">✅ Review submit ho gaya! Shukriya.</p>
+            </div>
+            <button onclick="closeConfirmCard()"
+                class="w-full border border-gray-300 text-gray-600 font-semibold py-3 rounded-xl hover:bg-gray-50 transition mt-3">
+                🔄 Aur Booking Karein / Band Karo
+            </button>
+        </div>
+    </div>
+
     <script src="script.js"></script>
+    <script>
+    (function() {
+        var params = new URLSearchParams(window.location.search);
+        var SALON_ID = (params.get('id') || '').toUpperCase();
+        var currentSalonName = 'Salon';
+        var currentDate = new Date().toISOString().split('T')[0];
+        var currentSubscriptionActive = true;
+        var selectedStars = 0;
+        var lastBookedPhone = '';
+
+        if (SALON_ID) {
+            var salonIdEl = document.getElementById('salonId');
+            if (salonIdEl) salonIdEl.textContent = SALON_ID;
+        }
+
+        function renderSubscriptionNotice(subscription) {
+            var notice = document.getElementById('subscriptionNotice');
+            var confirmBtn = document.querySelector('[onclick="confirmBooking()"]');
+            currentSubscriptionActive = !subscription || !!subscription.isActive;
+            if (!notice || !subscription) return;
+
+            notice.classList.remove('hidden');
+            if (subscription.isActive) {
+                notice.className = 'mt-5 rounded-xl p-4 text-sm font-semibold bg-emerald-50 text-emerald-700';
+                notice.textContent = subscription.label + ' - ' + (subscription.customerMessage || 'Booking available hai.');
+                if (confirmBtn) {
+                    confirmBtn.disabled = false;
+                    confirmBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+                }
+            } else {
+                notice.className = 'mt-5 rounded-xl p-4 text-sm font-semibold bg-red-50 text-red-700';
+                notice.textContent = subscription.customerMessage || 'Salon subscription inactive hai.';
+                if (confirmBtn) {
+                    confirmBtn.disabled = true;
+                    confirmBtn.classList.add('opacity-60', 'cursor-not-allowed');
+                }
+            }
+        }
+
+        function fetchSalonProfile() {
+            if (!SALON_ID) return;
+            fetch('/api/salon-profile/' + SALON_ID)
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (!d.success || !d.salon) return;
+                    var s = d.salon;
+                    currentSalonName = s.salonName || 'Salon';
+                    var el = document.getElementById('salonName');
+                    if (el) el.textContent = currentSalonName;
+                    var loc = document.getElementById('salonLocation');
+                    if (loc) loc.textContent = s.location || [s.address, s.city, s.state, s.pincode].filter(Boolean).join(', ') || 'Location update ho rahi hai';
+                    if (s.ownerPhone) {
+                        var ph = document.getElementById('salonPhone');
+                        var wl = document.getElementById('salonWhatsApp');
+                        var waNum = '91' + s.ownerPhone.replace(/\D/g, '').slice(-10);
+                        if (ph) ph.textContent = s.ownerPhone;
+                        if (wl) { wl.href = 'https://wa.me/' + waNum; wl.classList.remove('hidden'); }
+                    }
+                    renderSubscriptionNotice(s.subscription);
+                }).catch(function() {});
+        }
+
+        function showBanner(text, type) {
+            var banner = document.getElementById('slotStatusBanner');
+            if (!banner) return;
+            var c = { error: 'bg-red-100 text-red-700', success: 'bg-green-100 text-green-700', warning: 'bg-yellow-100 text-yellow-800', info: 'bg-blue-100 text-blue-700' };
+            banner.className = 'mb-4 rounded-xl p-3 text-center text-sm font-semibold ' + (c[type] || c.info);
+            banner.textContent = text;
+        }
+
+        function loadSlots() {
+            if (!SALON_ID) { showBanner('Salon ID nahi mila. QR dubara scan karein.', 'error'); return; }
+            fetch('/api/booking-state/' + SALON_ID)
+                .then(function(r) { return r.json(); })
+                .then(function(data) { renderSlots(data); })
+                .catch(function() { showBanner('Network error. Please refresh.', 'error'); });
+        }
+
+        function renderSlots(state) {
+            var container = document.getElementById('timeSlotsContainer');
+            if (!container) return;
+            renderSubscriptionNotice(state.subscription);
+            if (state.subscription && !state.subscription.isActive) {
+                showBanner(state.subscription.customerMessage || 'Salon subscription inactive hai.', 'error');
+                container.innerHTML = '<div class="col-span-2 text-center text-red-500 py-8 text-sm">Booking temporarily unavailable hai. Salon owner ko subscription renew karne bolein.</div>';
+                return;
+            }
+            if (!state.isOpen || !state.slots || !state.slots.length) {
+                showBanner('⏸️ Abhi booking band hai. Baad mein check karein.', 'warning');
+                container.innerHTML = '<div class="col-span-2 text-center text-gray-500 py-8 text-sm">Aaj ke liye koi slot available nahi hai.</div>';
+                return;
+            }
+            var now = new Date();
+            var nowMin = now.getHours() * 60 + now.getMinutes();
+            showBanner('🟢 Booking OPEN hai — Neeche se time slot chunein', 'success');
+            container.innerHTML = state.slots.map(function(slot) {
+                var p = slot.time.split(':').map(Number);
+                var slotMin = p[0] * 60 + p[1];
+                var isPast = slotMin + 30 <= nowMin;
+                var isFull = slot.booked >= slot.capacity;
+                var rem = slot.capacity - slot.booked;
+                if (isPast || isFull) {
+                    return '<div class="rounded-lg shadow p-4 text-center cursor-not-allowed select-none ' + (isPast ? 'bg-gray-100 text-gray-400' : 'bg-red-100 text-red-600') + '"><p class="font-bold text-lg">' + slot.time + '</p><p class="text-xs">' + (isPast ? 'Past' : 'Full') + '</p><p class="text-xs opacity-70">' + slot.booked + '/' + slot.capacity + '</p></div>';
+                }
+                return '<div class="bg-white rounded-lg shadow p-4 text-center text-gray-900 cursor-pointer hover:shadow-lg hover:bg-pink-50 transition time-slot" onclick="selectTimeSlot(this,\'' + slot.time + '\')"><p class="font-bold text-lg">' + slot.time + '</p><p class="text-xs text-green-600 font-semibold">' + rem + ' seat' + (rem > 1 ? 's' : '') + ' available</p><p class="text-xs text-gray-500">' + slot.booked + '/' + slot.capacity + ' booked</p></div>';
+            }).join('');
+        }
+
+        // Google Calendar URL builder
+        function buildCalendarUrl(salonName, date, time) {
+            var d = date.replace(/-/g, '');
+            var tp = time.split(':');
+            var h = parseInt(tp[0]); var m = parseInt(tp[1] || 0);
+            function pad(n) { return n < 10 ? '0' + n : '' + n; }
+            var startStr = d + 'T' + pad(h) + pad(m) + '00';
+            var eh = h; var em = m + 30;
+            if (em >= 60) { eh++; em -= 60; }
+            var endStr = d + 'T' + pad(eh) + pad(em) + '00';
+            return 'https://calendar.google.com/calendar/render?action=TEMPLATE' +
+                '&text=' + encodeURIComponent('Salon Appointment - ' + salonName) +
+                '&dates=' + startStr + '/' + endStr +
+                '&details=' + encodeURIComponent('BookMySalon se booking. Samay pe aayen!') +
+                '&location=' + encodeURIComponent(salonName) +
+                '&sf=true&output=xml';
+        }
+
+        // Show confirmation card after booking
+        function showConfirmCard(customerName, phone, time) {
+            lastBookedPhone = phone;
+            var card = document.getElementById('confirmationCard');
+            var msg = document.getElementById('confirmMsg');
+            var calBtn = document.getElementById('calendarBtn');
+            if (msg) msg.textContent = customerName + ' — ' + time + ' baje ka slot confirm ho gaya ✂️';
+            if (calBtn) calBtn.href = buildCalendarUrl(currentSalonName, currentDate, time);
+            selectedStars = 0;
+            document.querySelectorAll('.star-btn').forEach(function(s) { s.textContent = '☆'; });
+            var rm = document.getElementById('reviewMsg');
+            var rb = document.getElementById('reviewBtn');
+            var rc = document.getElementById('reviewComment');
+            var rs = document.getElementById('ratingSection');
+            if (rm) rm.classList.add('hidden');
+            if (rb) { rb.disabled = false; rb.textContent = '⭐ Rating Submit Karen'; rb.style.display = ''; }
+            if (rc) rc.value = '';
+            if (rs) rs.style.display = '';
+            if (card) card.classList.remove('hidden');
+        }
+
+        window.closeConfirmCard = function() {
+            var card = document.getElementById('confirmationCard');
+            if (card) card.classList.add('hidden');
+            resetBooking();
+        };
+
+        // Star rating click
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('star-btn')) {
+                selectedStars = parseInt(e.target.getAttribute('data-stars'));
+                document.querySelectorAll('.star-btn').forEach(function(s) {
+                    s.textContent = parseInt(s.getAttribute('data-stars')) <= selectedStars ? '★' : '☆';
+                });
+            }
+        });
+
+        // Submit review
+        window.submitReview = function() {
+            if (!selectedStars) { alert('Pehle stars chunein ☆'); return; }
+            var comment = document.getElementById('reviewComment') ? document.getElementById('reviewComment').value.trim() : '';
+            var rb = document.getElementById('reviewBtn');
+            if (rb) { rb.disabled = true; rb.textContent = 'Submit ho raha hai...'; }
+            fetch('/api/add-review', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ salonId: SALON_ID, customerPhone: lastBookedPhone, stars: selectedStars, comment: comment })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                var rm = document.getElementById('reviewMsg');
+                if (rm) { rm.textContent = '✅ Review submit ho gaya! Shukriya 🙏'; rm.classList.remove('hidden'); }
+                if (rb) rb.style.display = 'none';
+                setTimeout(fetchReviews, 1000);
+            })
+            .catch(function() {
+                if (rb) { rb.disabled = false; rb.textContent = '⭐ Rating Submit Karen'; }
+                alert('Review submit nahi hua. Dobara try karein.');
+            });
+        };
+
+        // Load reviews / rating display
+        function fetchReviews() {
+            if (!SALON_ID) return;
+            fetch('/api/salon-ratings/' + SALON_ID)
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (!d.success) return;
+                    var rd = document.getElementById('salonRatingDisplay');
+                    var rc = document.getElementById('salonReviewCount');
+                    if (d.avgRating && rd) { rd.textContent = '⭐ ' + d.avgRating; rd.classList.remove('hidden'); }
+                    if (d.totalReviews > 0 && rc) { rc.textContent = '(' + d.totalReviews + ' reviews)'; rc.classList.remove('hidden'); }
+                }).catch(function() {});
+        }
+
+        // Override confirmBooking
+        window.confirmBooking = function() {
+            var customerName = (document.getElementById('customerName') ? document.getElementById('customerName').value : '').trim();
+            var rawPhone = (document.getElementById('customerPhone') ? document.getElementById('customerPhone').value : '').replace(/\D/g, '');
+            if (!currentSubscriptionActive) { alert('Salon subscription inactive hai. Abhi booking available nahi hai.'); return; }
+            if (!selectedService || !selectedTime) { alert('⚠️ Service aur time slot dono select karein.'); return; }
+            if (!customerName) { alert('⚠️ Apna naam bharen.'); return; }
+            if (!/^[6-9]\d{9}$/.test(rawPhone)) { alert('⚠️ Valid 10-digit WhatsApp number bharen.'); return; }
+            if (!SALON_ID) { alert('Salon ID nahi mila. QR dubara scan karein.'); return; }
+            var btn = document.querySelector('[onclick="confirmBooking()"]');
+            if (btn) { btn.disabled = true; btn.textContent = 'Booking ho rahi hai...'; }
+            fetch('/api/book-slot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ salonId: SALON_ID, time: selectedTime, customerName: customerName, customerPhone: rawPhone })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (btn) { btn.disabled = false; btn.textContent = '✅ Confirm Booking'; }
+                if (data.success) {
+                    var bt = selectedTime;
+                    document.getElementById('customerName').value = '';
+                    document.getElementById('customerPhone').value = '';
+                    showConfirmCard(customerName, rawPhone, bt);
+                    setTimeout(loadSlots, 1500);
+                } else {
+                    alert('❌ ' + (data.msg || 'Booking fail ho gayi. Dobara try karein.'));
+                    loadSlots();
+                }
+            })
+            .catch(function() {
+                if (btn) { btn.disabled = false; btn.textContent = '✅ Confirm Booking'; }
+                alert('Network error. Internet check karke retry karein.');
+            });
+        };
+
+        setInterval(loadSlots, 30000);
+        if (SALON_ID) {
+            fetchSalonProfile();
+            fetchReviews();
+            loadSlots();
+        } else {
+            showBanner('⚠️ Salon ID nahi mila. QR code dubara scan karein.', 'error');
+        }
+    })();
+    </script>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 py-8 px-4 border-t border-gray-700 mt-12">
+        <div class="max-w-6xl mx-auto text-center text-gray-400">
+            <p class="font-semibold text-gray-200">BookMySalon by Chandrashekhar Gole</p>
+            <p class="mt-2 text-xs">&copy; 2024 BookMySalon. All rights reserved.</p>
+        </div>
+    </footer>
 </body>
 </html>

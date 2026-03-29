@@ -22,7 +22,10 @@
         <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
             <h1 class="text-xl font-extrabold tracking-wide">💇 Salon Dashboard</h1>
             <div id="statusBadge" class="hidden px-4 py-1.5 rounded-full text-sm font-bold"></div>
-            <button onclick="window.location.href='register.html'" class="text-xs text-gray-400 hover:text-white">← Register</button>
+            <div class="flex items-center gap-3">
+                <a href="admin.html" class="text-xs text-cyan-300 hover:text-cyan-200">Admin</a>
+                <button onclick="window.location.href='register.html'" class="text-xs text-gray-400 hover:text-white">← Register</button>
+            </div>
         </div>
     </header>
 
@@ -62,6 +65,21 @@
                     <p id="dbToday" class="font-semibold">—</p>
                 </div>
             </div>
+
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <p class="text-xs text-gray-400">Location Accuracy</p>
+                        <p id="locationStatus" class="text-sm font-semibold text-amber-300">Not set</p>
+                        <p id="locationCoords" class="text-xs text-gray-400 mt-1">Distance-based nearby ranking ke liye current salon location save karein.</p>
+                    </div>
+                    <button id="updateLocationBtn" onclick="updateSalonLocation()" class="rounded-xl bg-cyan-500 hover:bg-cyan-400 px-4 py-2.5 text-sm font-bold transition">
+                        📍 Update Current Location
+                    </button>
+                </div>
+            </div>
+
+            <div id="subscriptionBanner" class="hidden rounded-2xl border px-4 py-4 text-sm font-semibold"></div>
 
             <!-- Booking Control Card -->
             <div class="rounded-2xl border border-white/10 bg-gradient-to-br from-gray-900 to-gray-800 p-6">
@@ -196,6 +214,9 @@
         salonId: null,
         salonName: 'Demo Salon',
         ownerName: 'Owner',
+        subscription: null,
+        latitude: null,
+        longitude: null,
         isOpen: false,
         karigar: 0,
         openingTime: '10:00',
@@ -210,11 +231,22 @@
         setTodayDate();
         setNextResetTime();
 
+        const urlSalonId = getSalonIdFromUrl();
+        if (urlSalonId) {
+            state.salonId = urlSalonId;
+            state.date = new Date().toISOString().split('T')[0];
+            saveState();
+            showDashboard();
+            fetchSalonProfile();
+            fetchStateFromServer();
+        }
+
         const saved = loadState();
-        if (saved && saved.salonId) {
+        if (!urlSalonId && saved && saved.salonId) {
             state = { ...state, ...saved };
             checkDateReset();
             showDashboard();
+            fetchSalonProfile();
             fetchStateFromServer();
         }
 
@@ -227,6 +259,13 @@
             if (el) el.addEventListener('input', updateSlotPreview);
         });
     });
+
+    function getSalonIdFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        const id = (params.get('id') || '').trim().toUpperCase();
+        if (!id.startsWith('SALON-') || id.length < 10) return null;
+        return id;
+    }
 
     function setTodayDate() {
         const today = new Date().toLocaleDateString('en-IN', { weekday:'long', day:'2-digit', month:'short', year:'numeric' });
@@ -287,6 +326,7 @@
         state.date = new Date().toISOString().split('T')[0];
         saveState();
         showDashboard();
+        fetchSalonProfile();
         fetchStateFromServer();
     }
 
@@ -296,6 +336,121 @@
         document.getElementById('dbSalonId').textContent = state.salonId;
         document.getElementById('dbSalonName').textContent = state.salonName;
         document.getElementById('dbOwnerName').textContent = state.ownerName;
+    }
+
+    function fetchSalonProfile() {
+        if (!state.salonId) return;
+        fetch(`/api/salon-profile/${state.salonId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success || !data.salon) return;
+            state.salonName = data.salon.salonName || state.salonName;
+            state.ownerName = data.salon.ownerName || state.ownerName;
+            state.subscription = data.salon.subscription || null;
+            state.latitude = data.salon.latitude ?? null;
+            state.longitude = data.salon.longitude ?? null;
+            saveState();
+            document.getElementById('dbSalonName').textContent = state.salonName;
+            document.getElementById('dbOwnerName').textContent = state.ownerName;
+            renderSubscriptionBanner();
+            renderLocationCard();
+        })
+        .catch(() => {});
+    }
+
+    function renderLocationCard() {
+        const statusEl = document.getElementById('locationStatus');
+        const coordsEl = document.getElementById('locationCoords');
+        if (!statusEl || !coordsEl) return;
+
+        const hasCoords = state.latitude != null && state.longitude != null;
+        if (!hasCoords) {
+            statusEl.className = 'text-sm font-semibold text-amber-300';
+            statusEl.textContent = 'Not set';
+            coordsEl.textContent = 'Distance-based nearby ranking ke liye current salon location save karein.';
+            return;
+        }
+
+        statusEl.className = 'text-sm font-semibold text-emerald-300';
+        statusEl.textContent = 'Saved';
+        coordsEl.textContent = `Lat ${Number(state.latitude).toFixed(6)}, Lng ${Number(state.longitude).toFixed(6)}`;
+    }
+
+    function updateSalonLocation() {
+        if (!state.salonId) {
+            alert('Pehle salon dashboard load karein.');
+            return;
+        }
+        if (!navigator.geolocation) {
+            alert('Geolocation browser me available nahi hai.');
+            return;
+        }
+
+        const btn = document.getElementById('updateLocationBtn');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Locating...';
+            btn.classList.add('opacity-60', 'cursor-not-allowed');
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+                const latitude = pos.coords.latitude;
+                const longitude = pos.coords.longitude;
+
+                try {
+                    const res = await fetch('/api/salon-location/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ salonId: state.salonId, latitude, longitude })
+                    });
+                    const data = await res.json();
+                    if (!data.success) {
+                        alert(data.msg || 'Location update failed.');
+                        return;
+                    }
+
+                    state.latitude = data.salon?.latitude ?? latitude;
+                    state.longitude = data.salon?.longitude ?? longitude;
+                    saveState();
+                    renderLocationCard();
+                    alert('Location updated successfully. Nearby results ab distance ke basis par better honge.');
+                } catch {
+                    alert('Server error: location save nahi ho paaya.');
+                } finally {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = '📍 Update Current Location';
+                        btn.classList.remove('opacity-60', 'cursor-not-allowed');
+                    }
+                }
+            },
+            (err) => {
+                const msg = err?.code === 1
+                    ? 'Location permission deny hui. Browser settings me allow karein.'
+                    : 'Current location fetch nahi ho paayi. GPS/network on karke dobara try karein.';
+                alert(msg);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '📍 Update Current Location';
+                    btn.classList.remove('opacity-60', 'cursor-not-allowed');
+                }
+            },
+            { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+        );
+    }
+
+    function renderSubscriptionBanner() {
+        const banner = document.getElementById('subscriptionBanner');
+        if (!banner || !state.subscription) return;
+        banner.classList.remove('hidden');
+        if (state.subscription.isActive) {
+            banner.className = 'rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-4 text-sm font-semibold text-emerald-200';
+            banner.textContent = state.subscription.label + ' - ' + (state.subscription.ownerMessage || 'Salon active hai.');
+        } else {
+            banner.className = 'rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-4 text-sm font-semibold text-red-200';
+            banner.textContent = state.subscription.ownerMessage || 'Subscription inactive hai. Booking open nahi hogi jab tak admin activate na kare.';
+        }
     }
 
     // ── Open Booking Flow ─────────────────────────────────────
@@ -378,6 +533,7 @@
         .then(r => r.json())
         .then(data => {
             if (data.success) {
+                state.subscription = data.subscription || state.subscription;
                 state.isOpen   = data.isOpen;
                 state.karigar  = data.karigar  || 0;
                 state.slots    = data.slots    || [];
@@ -422,6 +578,8 @@
     // ── Render ────────────────────────────────────────────────
     function renderAll() {
         renderStatusBadge();
+        renderSubscriptionBanner();
+        renderLocationCard();
         renderControlPanel();
         renderSlots();
         renderSummary();
@@ -443,6 +601,21 @@
         const closedState = document.getElementById('closedState');
         const openState   = document.getElementById('openState');
         const openForm    = document.getElementById('openForm');
+        const canOperate = !state.subscription || state.subscription.isActive;
+        const closedTitle = closedState.querySelector('p.text-amber-200');
+        const closedText = closedState.querySelector('p.text-xs');
+
+        if (!canOperate) {
+            closedState.classList.remove('hidden');
+            openState.classList.add('hidden');
+            openForm.classList.add('hidden');
+            if (closedTitle) closedTitle.textContent = '🔒 Subscription Inactive';
+            if (closedText) closedText.textContent = 'Admin activation ke bina booking open nahi hogi.';
+            return;
+        }
+
+        if (closedTitle) closedTitle.textContent = '⏸ Booking Closed';
+        if (closedText) closedText.textContent = 'Open booking to start accepting appointments';
 
         if (state.isOpen) {
             closedState.classList.add('hidden');
@@ -483,10 +656,24 @@
             if (isPast)       { cls = 'slot-closed'; label = 'Past'; }
             else if (isFull)  { cls = 'slot-full';   label = 'Full'; }
 
-            return `<div class="${cls} rounded-xl p-3 text-center cursor-default select-none">
-                <p class="font-bold text-sm">${slot.time}–${slot.endTime}</p>
-                <p class="text-xs mt-1">${label}</p>
-                <p class="text-xs opacity-70">${slot.booked}/${slot.capacity} booked</p>
+            const bookingRows = (slot.bookings && slot.bookings.length)
+                ? slot.bookings.map(b => {
+                    const raw = String(b.phone || '').replace(/\D/g, '');
+                    const ph = raw.length >= 10 ? raw.slice(-10) : raw;
+                    const displayPhone = ph ? `+91 ${ph.slice(0, 5)} ${ph.slice(5)}` : '—';
+                    const waHref = ph ? `https://wa.me/91${ph}` : '#';
+                    return `<div class="mt-1 pt-1 border-t border-white/20 text-left">
+                        <p class="text-xs font-semibold truncate">👤 ${b.name || '—'}</p>
+                        <a href="${waHref}" target="_blank" class="text-xs text-green-300 hover:underline">💬 ${displayPhone}</a>
+                    </div>`;
+                }).join('')
+                : '';
+
+            return `<div class="${cls} rounded-xl p-3 cursor-default select-none">
+                <p class="font-bold text-sm text-center">${slot.time}–${slot.endTime}</p>
+                <p class="text-xs mt-1 text-center">${label}</p>
+                <p class="text-xs opacity-70 text-center">${slot.booked}/${slot.capacity} booked</p>
+                ${bookingRows}
             </div>`;
         }).join('');
     }
