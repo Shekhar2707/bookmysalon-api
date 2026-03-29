@@ -227,6 +227,20 @@ function uniqueTag() {
   assertCondition(legacyNoEndTime.success === true, `legacy no-endTime booking failed: ${legacyNoEndTime.msg || 'unknown'}`);
   assertCondition(legacyNoEndTime.endTime === '11:50', `legacy endTime expected 11:50 but got ${legacyNoEndTime.endTime || 'none'}`);
 
+  const legacyNoEndNoDuration = await post('/api/book-slot', {
+    salonId,
+    customerName: 'Farhan',
+    customerPhone: '9876507777',
+    startTime: '11:30',
+    serviceName: 'Legacy Test',
+    selectedServices: [{ name: 'Legacy Test', durationMin: 30 }],
+    karigarId: 'K2'
+  });
+
+  assertCondition(legacyNoEndNoDuration.success === true, `legacy no-end no-duration booking failed: ${legacyNoEndNoDuration.msg || 'unknown'}`);
+  assertCondition(legacyNoEndNoDuration.endTime === '12:00', `legacy fallback endTime expected 12:00 but got ${legacyNoEndNoDuration.endTime || 'none'}`);
+  assertCondition(Number(legacyNoEndNoDuration.durationMin) === 30, `legacy fallback duration expected 30 but got ${legacyNoEndNoDuration.durationMin}`);
+
   const allBusyAny = await post('/api/book-slot', {
     salonId,
     customerName: 'Eshan',
@@ -244,7 +258,7 @@ function uniqueTag() {
   const state = await get(`/api/booking-state/${salonId}`);
   assertCondition(state.success === true, 'booking-state failed');
   assertCondition(Number(state.bufferMin) === 5, `bufferMin expected 5 but got ${state.bufferMin}`);
-  assertCondition(Array.isArray(state.bookings) && state.bookings.length === 3, `expected 3 bookings but got ${Array.isArray(state.bookings) ? state.bookings.length : 'invalid'}`);
+  assertCondition(Array.isArray(state.bookings) && state.bookings.length === 4, `expected 4 bookings but got ${Array.isArray(state.bookings) ? state.bookings.length : 'invalid'}`);
 
   const summary = {
     salonId,
@@ -255,6 +269,7 @@ function uniqueTag() {
       overlapSameKarigarRejected: true,
       anyKarigarAssigned: true,
       legacyNoEndTimeHandled: true,
+      legacyNoDurationFallback30: true,
       allBusyRejected: true,
       bufferMin5: true
     },

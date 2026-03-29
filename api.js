@@ -1,6 +1,12 @@
 const express = require('express');
 require('dotenv').config();
+process.env.TZ = process.env.APP_TIMEZONE || 'Asia/Kolkata';
 const app = express();
+const helmet = require('helmet');
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
 app.use(express.json());
 
 const https = require('https');
@@ -16,8 +22,10 @@ function sanitizeDataNamespace(value) {
 const DATA_NAMESPACE = sanitizeDataNamespace(process.env.DATA_NAMESPACE || '');
 const DEMO_TOOLS_ENABLED = String(process.env.ENABLE_DEMO_TOOLS || '').trim().toLowerCase() === 'true';
 const DEMO_EMAIL_DOMAIN = String(process.env.DEMO_EMAIL_DOMAIN || '@demo.local').trim().toLowerCase();
+const APP_TIMEZONE = 'Asia/Kolkata';
+const FALLBACK_DURATION_MIN = 30;
 const DEFAULT_SERVICE_DURATION_MIN = Math.max(10, parseInt(process.env.DEFAULT_SERVICE_DURATION_MIN || '30', 10) || 30);
-const LEGACY_BOOKING_DURATION_MIN = Math.max(10, parseInt(process.env.LEGACY_BOOKING_DURATION_MIN || String(DEFAULT_SERVICE_DURATION_MIN), 10) || DEFAULT_SERVICE_DURATION_MIN);
+const LEGACY_BOOKING_DURATION_MIN = Math.max(30, parseInt(process.env.LEGACY_BOOKING_DURATION_MIN || String(DEFAULT_SERVICE_DURATION_MIN), 10) || DEFAULT_SERVICE_DURATION_MIN);
 const BOOKING_BUFFER_MIN = Math.max(0, parseInt(process.env.BOOKING_BUFFER_MIN || '5', 10) || 5);
 const DATA_DIR = path.join(__dirname, DATA_NAMESPACE ? `data-${DATA_NAMESPACE}` : 'data');
 const REGISTRY_FILE = path.join(DATA_DIR, 'salon-registry.json');
@@ -129,10 +137,49 @@ function normalizePhoneKey(phone) {
   return String(phone || '').replace(/\D/g, '');
 }
 
+function getIstParts(dateInput) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: APP_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).formatToParts(dateInput instanceof Date ? dateInput : new Date(dateInput));
+
+  const get = (type) => (parts.find((item) => item.type === type) || {}).value || '00';
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+    hour: get('hour'),
+    minute: get('minute'),
+    second: get('second')
+  };
+}
+
+function formatIstIso(dateInput) {
+  const p = getIstParts(dateInput);
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}+05:30`;
+}
+
+function nowIso() {
+  return formatIstIso(new Date());
+}
+
+function getTodayIst() {
+  const p = getIstParts(new Date());
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
 function toIsoAfterDays(baseIso, days) {
-  const date = baseIso ? new Date(baseIso) : new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString();
+  const baseMs = baseIso ? Date.parse(baseIso) : Date.now();
+  const safeBaseMs = Number.isFinite(baseMs) ? baseMs : Date.now();
+  const targetDate = new Date(safeBaseMs + (Math.max(0, parseInt(days, 10) || 0) * 86400000));
+  const p = getIstParts(targetDate);
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}+05:30`;
 }
 
 function normalizeLocationKey(parts) {
@@ -174,7 +221,7 @@ function syncSalonSubscriptionState(salon) {
   if (!salon) return false;
 
   let changed = false;
-  const registeredAt = salon.registeredAt || new Date().toISOString();
+  const registeredAt = salon.registeredAt || nowIso();
   if (!salon.registeredAt) {
     salon.registeredAt = registeredAt;
     changed = true;
@@ -388,7 +435,11 @@ function sanitizeBookingRange(startTime, endTime, durationMin, defaultDurationMi
   const startMin = parseTimeToMinutes(startTime);
   if (startMin == null) return null;
 
-  let normalizedDuration = Math.max(5, Math.min(300, parseInt(durationMin, 10) || defaultDurationMin));
+  const safeDefaultDuration = Math.max(5, Math.min(300, parseInt(defaultDurationMin, 10) || FALLBACK_DURATION_MIN));
+  const parsedDuration = parseInt(durationMin, 10);
+  let normalizedDuration = Number.isFinite(parsedDuration) && parsedDuration > 0
+    ? Math.max(5, Math.min(300, parsedDuration))
+    : safeDefaultDuration;
   let endMin = parseTimeToMinutes(endTime);
   if (endMin == null || endMin <= startMin) {
     endMin = startMin + normalizedDuration;
@@ -431,7 +482,7 @@ function extractLegacyBookingsFromSlots(stateObj) {
         endTime: entry?.endTime || null,
         durationMin: guessedDuration,
         serviceName: String(entry?.serviceName || '').slice(0, 80),
-        createdAt: stamp || new Date().toISOString(),
+        createdAt: stamp || nowIso(),
         karigarId: String(entry?.karigarId || '').trim().toUpperCase() || null,
         karigarName: String(entry?.karigarName || '').trim() || null
       });
@@ -442,7 +493,7 @@ function extractLegacyBookingsFromSlots(stateObj) {
 }
 
 function resolveBookingRangeMinutes(booking) {
-  const fallback = Math.max(5, parseInt(booking?.durationMin, 10) || LEGACY_BOOKING_DURATION_MIN);
+  const fallback = Math.max(5, parseInt(booking?.durationMin, 10) || LEGACY_BOOKING_DURATION_MIN || FALLBACK_DURATION_MIN);
   return sanitizeBookingRange(booking?.startTime, booking?.endTime, fallback, LEGACY_BOOKING_DURATION_MIN);
 }
 
@@ -821,7 +872,7 @@ function trackLeadEvent(lead, req) {
     name: name || 'Unknown',
     phone,
     maskedPhone: maskLeadPhone(phone),
-    capturedAt: new Date().toISOString(),
+    capturedAt: nowIso(),
     verified: true
   });
   if (aiAnalytics.latestLeads.length > 200) {
@@ -1277,7 +1328,7 @@ app.post('/api/register-salon', (req, res) => {
 
   const salonId = generateUniqueSalonId();
   const urls = buildSalonUrls(baseUrl, salonId);
-  const nowIso = new Date().toISOString();
+  const nowIsoValue = nowIso();
 
   salons.push({ name, email, phone, location: locationText, services: normalizedServices, karigars: normalizedKarigars, businessType });
   salonRegistry[salonId] = {
@@ -1300,14 +1351,14 @@ app.post('/api/register-salon', (req, res) => {
     karigars: normalizedKarigars,
     bookingUrl: bookingUrl || urls.bookingUrl,
     dashboardUrl: dashboardUrl || urls.dashboardUrl,
-    registeredAt: nowIso,
+    registeredAt: nowIsoValue,
     verifiedAt: null,
     lastWelcomeSentAt: null,
     verificationMessagesSent: 0,
     subscription: {
       status: 'trial',
-      trialStartedAt: nowIso,
-      trialEndsAt: toIsoAfterDays(nowIso, FREE_TRIAL_DAYS),
+      trialStartedAt: nowIsoValue,
+      trialEndsAt: toIsoAfterDays(nowIsoValue, FREE_TRIAL_DAYS),
       activeUntil: null,
       activatedAt: null,
       activatedBy: null,
@@ -1365,7 +1416,7 @@ app.post('/api/salon-location/update', (req, res) => {
 
   salon.latitude = latitude;
   salon.longitude = longitude;
-  salon.locationUpdatedAt = new Date().toISOString();
+  salon.locationUpdatedAt = nowIso();
   persistSalonRegistry(salonRegistry);
 
   return res.json({
@@ -1478,12 +1529,12 @@ app.post('/api/admin/subscription/activate', requireAdminKey, (req, res) => {
     return res.json({ success: false, msg: 'Manual subscription limit 100 salons tak pahunch chuka hai.' });
   }
 
-  const nowIso = new Date().toISOString();
+  const nowIsoValue = nowIso();
   salon.subscription = salon.subscription || {};
   salon.subscription.status = 'active';
   salon.subscription.plan = plan || `${requestedDays}-day-plan`;
-  salon.subscription.activatedAt = nowIso;
-  salon.subscription.activeUntil = toIsoAfterDays(nowIso, requestedDays);
+  salon.subscription.activatedAt = nowIsoValue;
+  salon.subscription.activeUntil = toIsoAfterDays(nowIsoValue, requestedDays);
   salon.subscription.activatedBy = activatedBy || 'admin';
   salon.subscription.activatedManually = true;
   salon.subscription.adminControlled = true;
@@ -1514,7 +1565,7 @@ app.post('/api/admin/salon-location/update', requireAdminKey, (req, res) => {
 
   salon.latitude = latitude;
   salon.longitude = longitude;
-  salon.locationUpdatedAt = new Date().toISOString();
+  salon.locationUpdatedAt = nowIso();
   persistSalonRegistry(salonRegistry);
 
   return res.json({
@@ -1570,14 +1621,14 @@ app.post('/api/ai/lead/request-verify', (req, res) => {
 
   pruneExpiredLeadVerifications();
   const token = generateLeadVerifyToken();
-  const expiresAt = new Date(Date.now() + AI_VERIFY_EXPIRY_MS).toISOString();
+  const expiresAt = formatIstIso(new Date(Date.now() + AI_VERIFY_EXPIRY_MS));
 
   aiLeadVerifications[token] = {
     token,
     name,
     phone: '',
     maskedPhone: '—',
-    createdAt: new Date().toISOString(),
+    createdAt: nowIso(),
     expiresAt,
     verifiedAt: null,
     status: 'pending'
@@ -1819,7 +1870,7 @@ app.post('/webhook', async (req, res) => {
 
       item.phone = senderPhone;
       item.maskedPhone = maskLeadPhone(senderPhone);
-      item.verifiedAt = new Date().toISOString();
+      item.verifiedAt = nowIso();
       item.status = 'verified';
       persistAiLeadVerifications();
       trackLeadEvent({ name: item.name, phone: item.phone }, { headers: {}, ip: fromPhone, connection: { remoteAddress: fromPhone } });
@@ -1995,8 +2046,8 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    salon.verifiedAt = salon.verifiedAt || new Date().toISOString();
-    salon.lastWelcomeSentAt = new Date().toISOString();
+    salon.verifiedAt = salon.verifiedAt || nowIso();
+    salon.lastWelcomeSentAt = nowIso();
     salon.verificationMessagesSent = (salon.verificationMessagesSent || 0) + 1;
     persistSalonRegistry(salonRegistry);
 
@@ -2007,9 +2058,28 @@ app.post('/webhook', async (req, res) => {
 
 // ── Booking State (persisted to disk, survives restarts) ─────────────────────
 const bookingStates = loadBookingStates(); // { salonId: { isOpen, karigar, openingTime, closingTime, slots, date } }
+const bookingWriteLocks = new Map();
+
+function withSalonWriteLock(salonId, task) {
+  const lockKey = String(salonId || '').trim().toUpperCase() || 'GLOBAL';
+  const previous = bookingWriteLocks.get(lockKey) || Promise.resolve();
+  let release = null;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const queued = previous.then(() => gate);
+  bookingWriteLocks.set(lockKey, queued);
+
+  return previous
+    .then(() => task())
+    .finally(() => {
+      if (typeof release === 'function') release();
+      if (bookingWriteLocks.get(lockKey) === queued) {
+        bookingWriteLocks.delete(lockKey);
+      }
+    });
+}
 
 function getToday() {
-  return new Date().toISOString().split('T')[0];
+  return getTodayIst();
 }
 
 function generateSlots(openTime, closeTime, karigar) {
@@ -2046,7 +2116,7 @@ app.post('/api/add-review', (req, res) => {
   reviews[sid] = reviews[sid] || [];
   const today = getToday();
   const idx = reviews[sid].findIndex(r => r.phone === phone && r.date === today);
-  const entry = { phone, stars: parseInt(stars), comment: String(comment || '').slice(0, 200).trim(), date: today, createdAt: new Date().toISOString() };
+  const entry = { phone, stars: parseInt(stars), comment: String(comment || '').slice(0, 200).trim(), date: today, createdAt: nowIso() };
   if (idx >= 0) { reviews[sid][idx] = entry; } else { reviews[sid].push(entry); }
   persistReviews();
   return res.json({ success: true, msg: 'Review saved!' });
@@ -2099,171 +2169,202 @@ app.get('/api/booking-state/:salonId', (req, res) => {
 });
 
 // POST /api/booking-open  { salonId, karigar, openingTime, closingTime }
-app.post('/api/booking-open', (req, res) => {
-  const { salonId, karigar, openingTime, closingTime } = req.body || {};
+app.post('/api/booking-open', async (req, res) => {
+  const { karigar, openingTime, closingTime } = req.body || {};
+  const salonId = String(req.body?.salonId || '').trim().toUpperCase();
   if (!salonId || !openingTime || !closingTime) {
     return res.json({ success: false, msg: 'Missing fields' });
   }
-  const salon = salonRegistry[salonId];
-  if (!salon) {
-    return res.json({ success: false, msg: 'Salon not found' });
-  }
-  const subscription = getSalonSubscriptionSnapshot(salon);
-  if (!subscription.isActive) {
-    return res.json({ success: false, msg: subscription.ownerMessage });
-  }
-  if (openingTime >= closingTime) {
-    return res.json({ success: false, msg: 'Closing time must be after opening time' });
-  }
 
-  const normalizedKarigars = normalizeKarigarList(req.body?.karigars, karigar || salon?.karigar || salon?.karigars?.length || 0);
-  const activeKarigars = normalizedKarigars.filter((item) => item.active !== false);
-  if (!activeKarigars.length) {
-    return res.json({ success: false, msg: 'At least one active karigar is required' });
-  }
+  try {
+    const result = await withSalonWriteLock(salonId, () => {
+      const salon = salonRegistry[salonId];
+      if (!salon) return { success: false, msg: 'Salon not found' };
 
-  const today = getToday();
-  const slots = generateSlots(openingTime, closingTime, activeKarigars.length);
-  bookingStates[salonId] = {
-    salonId,
-    isOpen: true,
-    karigar: activeKarigars.length,
-    karigars: normalizedKarigars,
-    openingTime,
-    closingTime,
-    bufferMin: BOOKING_BUFFER_MIN,
-    slots,
-    bookings: [],
-    date: today,
-    closeReason: null
-  };
-  if (salon) {
-    salon.karigars = normalizedKarigars;
-    salon.karigar = activeKarigars.length;
-    persistSalonRegistry(salonRegistry);
+      const subscription = getSalonSubscriptionSnapshot(salon);
+      if (!subscription.isActive) return { success: false, msg: subscription.ownerMessage };
+      if (openingTime >= closingTime) {
+        return { success: false, msg: 'Closing time must be after opening time' };
+      }
+
+      const normalizedKarigars = normalizeKarigarList(req.body?.karigars, karigar || salon?.karigar || salon?.karigars?.length || 0);
+      const activeKarigars = normalizedKarigars.filter((item) => item.active !== false);
+      if (!activeKarigars.length) {
+        return { success: false, msg: 'At least one active karigar is required' };
+      }
+
+      const today = getToday();
+      const slots = generateSlots(openingTime, closingTime, activeKarigars.length);
+      bookingStates[salonId] = {
+        salonId,
+        isOpen: true,
+        karigar: activeKarigars.length,
+        karigars: normalizedKarigars,
+        openingTime,
+        closingTime,
+        bufferMin: BOOKING_BUFFER_MIN,
+        slots,
+        bookings: [],
+        date: today,
+        closeReason: null
+      };
+
+      salon.karigars = normalizedKarigars;
+      salon.karigar = activeKarigars.length;
+      persistSalonRegistry(salonRegistry);
+      persistBookingStates();
+      return { success: true, slots, karigar: activeKarigars.length, karigars: normalizedKarigars, message: 'Booking opened' };
+    });
+
+    return res.json(result);
+  } catch (error) {
+    console.error('[booking-open] lock failure:', error.message);
+    return res.json({ success: false, msg: 'Booking open failed. Retry karein.' });
   }
-  persistBookingStates();
-  res.json({ success: true, slots, karigar: activeKarigars.length, karigars: normalizedKarigars, message: 'Booking opened' });
 });
 
 // POST /api/booking-close  { salonId }
-app.post('/api/booking-close', (req, res) => {
-  const { salonId } = req.body || {};
+app.post('/api/booking-close', async (req, res) => {
+  const salonId = String(req.body?.salonId || '').trim().toUpperCase();
   if (!salonId || !bookingStates[salonId]) {
     return res.json({ success: false, msg: 'Salon not found' });
   }
-  bookingStates[salonId].isOpen = false;
-  bookingStates[salonId].closeReason = 'manual';
-  persistBookingStates();
-  res.json({ success: true, message: 'Booking closed' });
+
+  try {
+    const result = await withSalonWriteLock(salonId, () => {
+      if (!bookingStates[salonId]) {
+        return { success: false, msg: 'Salon not found' };
+      }
+      bookingStates[salonId].isOpen = false;
+      bookingStates[salonId].closeReason = 'manual';
+      persistBookingStates();
+      return { success: true, message: 'Booking closed' };
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('[booking-close] lock failure:', error.message);
+    return res.json({ success: false, msg: 'Booking close failed. Retry karein.' });
+  }
 });
 
 // POST /api/book-slot  { salonId, startTime, endTime, customerName, customerPhone, durationMin, karigarId }
-app.post('/api/book-slot', (req, res) => {
-  const { salonId, customerName, customerPhone } = req.body || {};
+app.post('/api/book-slot', async (req, res) => {
+  const customerName = req.body?.customerName;
+  const customerPhone = req.body?.customerPhone;
+  const salonId = String(req.body?.salonId || '').trim().toUpperCase();
   const startTime = req.body?.startTime || req.body?.time;
   const requestedRange = sanitizeBookingRange(startTime, req.body?.endTime, req.body?.durationMin, LEGACY_BOOKING_DURATION_MIN);
-  const bs = bookingStates[salonId];
-  const salon = salonRegistry[salonId];
-  const subscription = getSalonSubscriptionSnapshot(salon);
-  if (!subscription.isActive) return res.json({ success: false, msg: subscription.customerMessage });
-  if (!bs || !bs.isOpen) return res.json({ success: false, msg: 'Salon booking is closed' });
   if (!requestedRange) return res.json({ success: false, msg: 'Invalid start/end time' });
 
-  if (ensureBookingStateSchema(bs, salon)) {
-    bs.slots = rebuildLegacySlotsFromBookings(bs);
-  }
+  try {
+    const result = await withSalonWriteLock(salonId, () => {
+      const bs = bookingStates[salonId];
+      const salon = salonRegistry[salonId];
+      const subscription = getSalonSubscriptionSnapshot(salon);
+      if (!subscription.isActive) return { success: false, msg: subscription.customerMessage };
+      if (!bs || !bs.isOpen) return { success: false, msg: 'Salon booking is closed' };
 
-  const dayStart = parseTimeToMinutes(bs.openingTime);
-  const dayEnd = parseTimeToMinutes(bs.closingTime);
-  if (dayStart == null || dayEnd == null || requestedRange.startMin < dayStart || requestedRange.endMin > dayEnd) {
-    return res.json({ success: false, msg: 'Selected time salon working hours ke bahar hai.' });
-  }
+      if (ensureBookingStateSchema(bs, salon)) {
+        bs.slots = rebuildLegacySlotsFromBookings(bs);
+      }
 
-  const allKarigars = activeKarigarsFromState(bs, salon).filter((item) => item.active !== false);
-  if (!allKarigars.length) return res.json({ success: false, msg: 'No active karigar available' });
+      const dayStart = parseTimeToMinutes(bs.openingTime);
+      const dayEnd = parseTimeToMinutes(bs.closingTime);
+      if (dayStart == null || dayEnd == null || requestedRange.startMin < dayStart || requestedRange.endMin > dayEnd) {
+        return { success: false, msg: 'Selected time salon working hours ke bahar hai.' };
+      }
 
-  const selectedKarigarId = String(req.body?.karigarId || 'ANY').trim().toUpperCase() || 'ANY';
-  const targetKarigars = selectedKarigarId === 'ANY'
-    ? allKarigars
-    : allKarigars.filter((item) => item.karigarId === selectedKarigarId);
+      const allKarigars = activeKarigarsFromState(bs, salon).filter((item) => item.active !== false);
+      if (!allKarigars.length) return { success: false, msg: 'No active karigar available' };
 
-  if (!targetKarigars.length) return res.json({ success: false, msg: 'Selected karigar not available' });
+      const selectedKarigarId = String(req.body?.karigarId || 'ANY').trim().toUpperCase() || 'ANY';
+      const targetKarigars = selectedKarigarId === 'ANY'
+        ? allKarigars
+        : allKarigars.filter((item) => item.karigarId === selectedKarigarId);
 
-  const bookings = Array.isArray(bs.bookings) ? bs.bookings : [];
-  const bufferedRequested = {
-    startMin: requestedRange.startMin,
-    endMin: requestedRange.endMin + BOOKING_BUFFER_MIN
-  };
+      if (!targetKarigars.length) return { success: false, msg: 'Selected karigar not available' };
 
-  // 1 booking per phone per day per salon
-  const cleanPhone = String(customerPhone || '').replace(/\D/g, '').slice(-10);
-  const alreadyToday = bookings.some((entry) => String(entry?.phone || '').replace(/\D/g, '').slice(-10) === cleanPhone);
-  if (alreadyToday) return res.json({ success: false, msg: 'Aapki aaj ki booking pehle se hai is salon mein. Kal dobara aayen! 🙏' });
-
-  let assignedKarigar = null;
-  for (const karigarItem of targetKarigars) {
-    const hasConflict = bookings.some((entry) => {
-      const entryKarigar = String(entry?.karigarId || '').trim().toUpperCase();
-      if (entryKarigar && entryKarigar !== karigarItem.karigarId) return false;
-      const existingRange = resolveBookingRangeMinutes(entry);
-      if (!existingRange) return false;
-      const bufferedExisting = {
-        startMin: existingRange.startMin,
-        endMin: existingRange.endMin + BOOKING_BUFFER_MIN
+      const bookings = Array.isArray(bs.bookings) ? bs.bookings : [];
+      const bufferedRequested = {
+        startMin: requestedRange.startMin,
+        endMin: requestedRange.endMin + BOOKING_BUFFER_MIN
       };
-      return hasTimeOverlap(bufferedRequested, bufferedExisting);
+
+      // 1 booking per phone per day per salon
+      const cleanPhone = String(customerPhone || '').replace(/\D/g, '').slice(-10);
+      const alreadyToday = bookings.some((entry) => String(entry?.phone || '').replace(/\D/g, '').slice(-10) === cleanPhone);
+      if (alreadyToday) return { success: false, msg: 'Aapki aaj ki booking pehle se hai is salon mein. Kal dobara aayen! 🙏' };
+
+      let assignedKarigar = null;
+      for (const karigarItem of targetKarigars) {
+        const hasConflict = bookings.some((entry) => {
+          const entryKarigar = String(entry?.karigarId || '').trim().toUpperCase();
+          if (entryKarigar && entryKarigar !== karigarItem.karigarId) return false;
+          const existingRange = resolveBookingRangeMinutes(entry);
+          if (!existingRange) return false;
+          const bufferedExisting = {
+            startMin: existingRange.startMin,
+            endMin: existingRange.endMin + BOOKING_BUFFER_MIN
+          };
+          return hasTimeOverlap(bufferedRequested, bufferedExisting);
+        });
+        if (!hasConflict) {
+          assignedKarigar = karigarItem;
+          break;
+        }
+      }
+
+      if (!assignedKarigar) {
+        return { success: false, msg: 'Selected time par koi karigar free nahi hai. Dusra slot chunein.' };
+      }
+
+      const bookingTime = nowIso();
+      const bookingRecord = {
+        bookingId: `BK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+        name: String(customerName || '').trim() || 'Customer',
+        phone: cleanPhone,
+        karigarId: assignedKarigar.karigarId,
+        karigarName: assignedKarigar.name,
+        startTime: requestedRange.startTime,
+        endTime: requestedRange.endTime,
+        durationMin: requestedRange.durationMin,
+        serviceName: String(req.body?.serviceName || '').slice(0, 80),
+        selectedServices: normalizeServiceList(req.body?.selectedServices),
+        createdAt: bookingTime
+      };
+
+      bs.bookings = bookings;
+      bs.bookings.push(bookingRecord);
+      bs.slots = rebuildLegacySlotsFromBookings(bs);
+      persistBookingStates();
+
+      const remaining = allKarigars.length - bs.bookings.filter((entry) => {
+        const entryRange = resolveBookingRangeMinutes(entry);
+        if (!entryRange) return false;
+        return hasTimeOverlap(requestedRange, entryRange);
+      }).length;
+
+      return {
+        success: true,
+        message: `Slot ${requestedRange.startTime} - ${requestedRange.endTime} booked for ${customerName}`,
+        remaining: Math.max(0, remaining),
+        salonId,
+        startTime: requestedRange.startTime,
+        time: requestedRange.startTime,
+        endTime: requestedRange.endTime,
+        customerName,
+        durationMin: requestedRange.durationMin,
+        karigarId: assignedKarigar.karigarId,
+        karigarName: assignedKarigar.name,
+        bufferMin: BOOKING_BUFFER_MIN
+      };
     });
-    if (!hasConflict) {
-      assignedKarigar = karigarItem;
-      break;
-    }
+
+    return res.json(result);
+  } catch (error) {
+    console.error('[book-slot] lock failure:', error.message);
+    return res.json({ success: false, msg: 'Booking request failed. Retry karein.' });
   }
-
-  if (!assignedKarigar) {
-    return res.json({ success: false, msg: 'Selected time par koi karigar free nahi hai. Dusra slot chunein.' });
-  }
-
-  const bookingTime = new Date().toISOString();
-  const bookingRecord = {
-    bookingId: `BK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
-    name: String(customerName || '').trim() || 'Customer',
-    phone: cleanPhone,
-    karigarId: assignedKarigar.karigarId,
-    karigarName: assignedKarigar.name,
-    startTime: requestedRange.startTime,
-    endTime: requestedRange.endTime,
-    durationMin: requestedRange.durationMin,
-    serviceName: String(req.body?.serviceName || '').slice(0, 80),
-    selectedServices: normalizeServiceList(req.body?.selectedServices),
-    createdAt: bookingTime
-  };
-
-  bs.bookings = bookings;
-  bs.bookings.push(bookingRecord);
-  bs.slots = rebuildLegacySlotsFromBookings(bs);
-  persistBookingStates();
-
-  const remaining = allKarigars.length - bs.bookings.filter((entry) => {
-    const entryRange = resolveBookingRangeMinutes(entry);
-    if (!entryRange) return false;
-    return hasTimeOverlap(requestedRange, entryRange);
-  }).length;
-
-  res.json({
-    success: true,
-    message: `Slot ${requestedRange.startTime} - ${requestedRange.endTime} booked for ${customerName}`,
-    remaining: Math.max(0, remaining),
-    salonId,
-    startTime: requestedRange.startTime,
-    time: requestedRange.startTime,
-    endTime: requestedRange.endTime,
-    customerName,
-    durationMin: requestedRange.durationMin,
-    karigarId: assignedKarigar.karigarId,
-    karigarName: assignedKarigar.name,
-    bufferMin: BOOKING_BUFFER_MIN
-  });
 });
 
 // ── Customer Feedback ─────────────────────────────────────────────
@@ -2277,7 +2378,7 @@ app.post('/api/feedback', (req, res) => {
   if (cleanPhone.length !== 10) return res.json({ success: false, msg: 'Phone 10 digits ka hona chahiye.' });
   if (!cleanMsg || cleanMsg.length < 5) return res.json({ success: false, msg: 'Message bahut chota hai.' });
   const list = loadFeedback();
-  list.push({ name: cleanName, phone: cleanPhone, message: cleanMsg, submittedAt: new Date().toISOString() });
+  list.push({ name: cleanName, phone: cleanPhone, message: cleanMsg, submittedAt: nowIso() });
   saveFeedback(list);
   console.log(`[Feedback] New from ${cleanName} (${cleanPhone})`);
   return res.json({ success: true, msg: 'Shukriya! Sujhav mil gaya.' });
