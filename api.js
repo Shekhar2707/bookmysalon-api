@@ -7,7 +7,7 @@ app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false
 }));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
 const https = require('https');
 const fs = require('fs');
@@ -2402,6 +2402,17 @@ app.post('/api/admin/feedback/reset', requireAdminKey, (req, res) => {
       : 'Sujhav reset skipped: clear karne ke liye koi feedback data nahi tha.',
     resetInfo: { clearedCount }
   });
+});
+
+// Handle malformed JSON/body parser errors gracefully.
+app.use((err, req, res, next) => {
+  if (err && err.type === 'entity.parse.failed') {
+    return res.status(400).json({ success: false, msg: 'Invalid JSON payload' });
+  }
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).json({ success: false, msg: 'Payload too large' });
+  }
+  return next(err);
 });
 
 // Static site
