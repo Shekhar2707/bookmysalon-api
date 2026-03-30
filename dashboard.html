@@ -9,6 +9,7 @@
     <style>
         body { font-family: Manrope, sans-serif; }
         .slot-open   { background: #d1fae5; border: 2px solid #10b981; color: #065f46; }
+        .slot-partial{ background: #fef3c7; border: 2px solid #f59e0b; color: #78350f; }
         .slot-full   { background: #fecaca; border: 2px solid #ef4444; color: #7f1d1d; }
         .slot-closed { background: #f3f4f6; border: 2px dashed #9ca3af; color: #6b7280; }
         .pulse-green { animation: pulse 2s infinite; }
@@ -832,12 +833,14 @@
             const slotMin = sh * 60 + sm;
             const isPast = slotMin + SLOT_DURATION <= nowMin;
             const isFull = slot.booked >= slot.capacity;
+            const isPartial = slot.booked > 0 && slot.booked < slot.capacity;
             const remaining = slot.capacity - slot.booked;
 
             let cls = 'slot-open';
             let label = `${remaining} left`;
             if (isPast)       { cls = 'slot-closed'; label = 'Past'; }
             else if (isFull)  { cls = 'slot-full';   label = 'Full'; }
+            else if (isPartial) { cls = 'slot-partial'; label = `${slot.booked} booked`; }
 
             const bookingRows = (slot.bookings && slot.bookings.length)
                 ? slot.bookings.map(b => {
@@ -847,7 +850,7 @@
                     const waHref = ph ? `https://wa.me/91${ph}` : '#';
                     const safeName = String(b.name || '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
                     return `<div class="mt-1 pt-1 border-t border-white/20 text-left">
-                        <p class="text-xs font-semibold truncate">👤 ${safeName}</p>
+                        <p class="text-xs font-semibold">👤 ${safeName}</p>
                         <p class="text-xs font-bold text-cyan-100">📱 ${displayPhone}</p>
                         <a href="${waHref}" target="_blank" rel="noopener noreferrer" class="text-xs text-green-300 hover:underline">💬 WhatsApp Chat</a>
                     </div>`;

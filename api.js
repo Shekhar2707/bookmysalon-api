@@ -565,18 +565,34 @@ function ensureBookingStateSchema(stateObj, salon) {
 function rebuildLegacySlotsFromBookings(stateObj) {
   const activeCount = Math.max(0, (stateObj.karigars || []).filter((k) => k.active !== false).length);
   const legacySlots = generateSlots(stateObj.openingTime, stateObj.closingTime, activeCount);
-  const ranges = (Array.isArray(stateObj.bookings) ? stateObj.bookings : [])
-    .map((entry) => resolveBookingRangeMinutes(entry))
+  const normalizedBookings = (Array.isArray(stateObj.bookings) ? stateObj.bookings : [])
+    .map((entry) => {
+      const entryRange = resolveBookingRangeMinutes(entry);
+      if (!entryRange) return null;
+      return {
+        entry,
+        range: entryRange
+      };
+    })
     .filter(Boolean);
 
   legacySlots.forEach((slot) => {
     const slotRange = sanitizeBookingRange(slot.time, slot.endTime, 30, 30);
     if (!slotRange) return;
-    let used = 0;
-    ranges.forEach((entryRange) => {
-      if (hasTimeOverlap(slotRange, entryRange)) used += 1;
-    });
-    slot.booked = Math.min(slot.capacity, used);
+    const slotBookings = normalizedBookings
+      .filter(({ range }) => hasTimeOverlap(slotRange, range))
+      .map(({ entry }) => ({
+        bookingId: entry.bookingId,
+        name: entry.name,
+        phone: entry.phone,
+        startTime: entry.startTime,
+        endTime: entry.endTime,
+        karigarId: entry.karigarId,
+        karigarName: entry.karigarName,
+        serviceName: entry.serviceName
+      }));
+    slot.bookings = slotBookings;
+    slot.booked = Math.min(slot.capacity, slotBookings.length);
   });
 
   return legacySlots;
