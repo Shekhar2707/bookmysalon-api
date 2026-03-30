@@ -596,8 +596,10 @@
                 '&sf=true&output=xml';
         }
 
-        function showConfirmCard(customerName, phone, slotLabel, startTime, endTime) {
+        function showConfirmCard(customerName, phone, slotLabel, startTime, endTime, options) {
             lastBookedPhone = phone;
+            options = options || {};
+            var shouldAutoOpenCalendar = options.autoOpenCalendar !== false;
             var card = document.getElementById('confirmationCard');
             var msg = document.getElementById('confirmMsg');
             var calBtn = document.getElementById('calendarBtn');
@@ -605,7 +607,9 @@
             var calUrl = buildCalendarUrl(currentSalonName, currentDate, startTime, endTime);
             if (calBtn) calBtn.href = calUrl;
             // Auto-open Google Calendar in new tab (browser allows this since it's in user-click chain)
-            try { window.open(calUrl, '_blank', 'noopener,noreferrer'); } catch(e) {}
+            if (shouldAutoOpenCalendar) {
+                try { window.open(calUrl, '_blank', 'noopener,noreferrer'); } catch(e) {}
+            }
             selectedStars = 0;
             document.querySelectorAll('.star-btn').forEach(function(s) { s.textContent = '☆'; });
             var rm = document.getElementById('reviewMsg');
@@ -699,6 +703,52 @@
                 }).catch(function() {});
         }
 
+        function createBookingRequestPayload(customerName, rawPhone) {
+            var durationMin = getSelectedDurationMin();
+            var serviceNames = selectedServices.map(function(item) { return item.name; });
+            return {
+                serviceNames: serviceNames,
+                payload: {
+                    salonId: SALON_ID,
+                    startTime: selectedSlot.startTime,
+                    endTime: selectedSlot.endTime,
+                    customerName: customerName,
+                    customerPhone: rawPhone,
+                    durationMin: durationMin,
+                    serviceName: serviceNames.join(', '),
+                    selectedServices: selectedServices,
+                    karigarId: selectedSlot.karigarId
+                }
+            };
+        }
+
+        function reserveSelectedSlot(customerName, rawPhone) {
+            var request = createBookingRequestPayload(customerName, rawPhone);
+            return fetch('/api/book-slot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(request.payload)
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.success) {
+                    throw new Error(data.msg || 'Booking fail ho gayi. Dobara try karein.');
+                }
+                return {
+                    data: data,
+                    serviceNames: request.serviceNames
+                };
+            });
+        }
+
+        function getSalonWhatsAppBaseHref() {
+            var waEl = document.getElementById('salonWhatsApp');
+            if (!waEl || !waEl.href || waEl.href === '#' || waEl.href === window.location.href) {
+                return '';
+            }
+            return waEl.href.split('?')[0];
+        }
+
         window.confirmBooking = function() {
             var customerName = (document.getElementById('customerName') ? document.getElementById('customerName').value : '').trim();
             var rawPhone = (document.getElementById('customerPhone') ? document.getElementById('customerPhone').value : '').replace(/\D/g, '');
@@ -711,40 +761,65 @@
             var btn = document.querySelector('[onclick="confirmBooking()"]');
             if (btn) { btn.disabled = true; btn.textContent = 'Booking ho rahi hai...'; }
 
-            var durationMin = getSelectedDurationMin();
-            var serviceNames = selectedServices.map(function(item) { return item.name; });
-            fetch('/api/book-slot', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    salonId: SALON_ID,
-                    startTime: selectedSlot.startTime,
-                    endTime: selectedSlot.endTime,
-                    customerName: customerName,
-                    customerPhone: rawPhone,
-                    durationMin: durationMin,
-                    serviceName: serviceNames.join(', '),
-                    selectedServices: selectedServices,
-                    karigarId: selectedSlot.karigarId
-                })
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
+            reserveSelectedSlot(customerName, rawPhone)
+            .then(function() {
                 if (btn) { btn.disabled = false; btn.textContent = 'Confirm Booking'; }
-                if (data.success) {
-                    var slotLabel = selectedSlot.startTime + ' - ' + selectedSlot.endTime + ' (' + selectedSlot.karigarName + ')';
-                    document.getElementById('customerName').value = '';
-                    document.getElementById('customerPhone').value = '';
-                    showConfirmCard(customerName, rawPhone, slotLabel, selectedSlot.startTime, selectedSlot.endTime);
-                    setTimeout(loadSlots, 1200);
-                } else {
-                    alert(data.msg || 'Booking fail ho gayi. Dobara try karein.');
-                    loadSlots();
-                }
+                var slotLabel = selectedSlot.startTime + ' - ' + selectedSlot.endTime + ' (' + selectedSlot.karigarName + ')';
+                document.getElementById('customerName').value = '';
+                document.getElementById('customerPhone').value = '';
+                showConfirmCard(customerName, rawPhone, slotLabel, selectedSlot.startTime, selectedSlot.endTime);
+                setTimeout(loadSlots, 1200);
             })
-            .catch(function() {
+            .catch(function(error) {
                 if (btn) { btn.disabled = false; btn.textContent = 'Confirm Booking'; }
-                alert('Network error. Internet check karke retry karein.');
+                alert(error && error.message ? error.message : 'Network error. Internet check karke retry karein.');
+                loadSlots();
+            });
+        };
+
+        window.bookViaWhatsApp = function() {
+            var customerName = (document.getElementById('customerName') ? document.getElementById('customerName').value : '').trim();
+            var rawPhone = (document.getElementById('customerPhone') ? document.getElementById('customerPhone').value : '').replace(/\D/g, '');
+            if (!currentSubscriptionActive) { alert('Salon subscription inactive hai. Abhi booking available nahi hai.'); return; }
+            if (!selectedServices.length || !selectedSlot) { alert('Service aur time slot dono select karein.'); return; }
+            if (!customerName) { alert('Apna naam bharen.'); return; }
+            if (!/^[6-9]\d{9}$/.test(rawPhone)) { alert('Valid 10-digit WhatsApp number bharen.'); return; }
+            if (!SALON_ID) { alert('Salon ID nahi mila. QR dubara scan karein.'); return; }
+
+            var waBaseHref = getSalonWhatsAppBaseHref();
+            if (!waBaseHref) { alert('Salon ka WhatsApp number abhi available nahi hai.'); return; }
+
+            var btn = document.querySelector('[onclick="bookViaWhatsApp()"]');
+            if (btn) { btn.disabled = true; btn.textContent = 'Booking + WhatsApp bhej rahe hain...'; }
+
+            reserveSelectedSlot(customerName, rawPhone)
+            .then(function(result) {
+                if (btn) { btn.disabled = false; btn.textContent = 'Book via WhatsApp'; }
+
+                var slotLabel = selectedSlot.startTime + ' - ' + selectedSlot.endTime + ' (' + selectedSlot.karigarName + ')';
+                var serviceLabel = result.serviceNames.length ? result.serviceNames.join(', ') : 'Service';
+                var customerPhoneDisplay = '+91 ' + rawPhone;
+                var message = [
+                    'Hi, booking request confirm ho gayi hai:',
+                    'Customer Name: ' + customerName,
+                    'Customer Phone: ' + customerPhoneDisplay,
+                    'Service: ' + serviceLabel,
+                    'Date: ' + formatDisplayDate(currentDate),
+                    'Slot: ' + slotLabel,
+                    'Salon ID: ' + SALON_ID
+                ].join('\n');
+
+                document.getElementById('customerName').value = '';
+                document.getElementById('customerPhone').value = '';
+                showConfirmCard(customerName, rawPhone, slotLabel, selectedSlot.startTime, selectedSlot.endTime, { autoOpenCalendar: false });
+                setTimeout(loadSlots, 1200);
+
+                window.open(waBaseHref + '?text=' + encodeURIComponent(message), '_blank', 'noopener,noreferrer');
+            })
+            .catch(function(error) {
+                if (btn) { btn.disabled = false; btn.textContent = 'Book via WhatsApp'; }
+                alert(error && error.message ? error.message : 'Network error. Internet check karke retry karein.');
+                loadSlots();
             });
         };
 
