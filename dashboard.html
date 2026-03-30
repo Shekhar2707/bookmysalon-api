@@ -254,7 +254,7 @@
         const urlSalonId = getSalonIdFromUrl();
         if (urlSalonId) {
             state.salonId = urlSalonId;
-            state.date = new Date().toISOString().split('T')[0];
+            state.date = getTodayInISTForInput();
             saveState();
             showDashboard();
             fetchSalonProfile();
@@ -366,6 +366,17 @@
         return id;
     }
 
+    function getTodayInISTForInput() {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).formatToParts(new Date());
+        const get = (type) => (parts.find((item) => item.type === type) || {}).value || '';
+        return `${get('year')}-${get('month')}-${get('day')}`;
+    }
+
     function setTodayDate() {
         const today = new Date().toLocaleDateString('en-IN', { weekday:'long', day:'2-digit', month:'short', year:'numeric' });
         document.getElementById('dbToday').textContent = today;
@@ -395,7 +406,7 @@
 
     // ── Date Reset Check ──────────────────────────────────────
     function checkDateReset() {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getTodayInISTForInput();
         if (state.date !== today) {
             state.isOpen = false;
             state.slots = [];
@@ -422,7 +433,7 @@
         state.salonId = id;
         state.salonName = 'My Salon'; // Will be real when DB is connected
         state.ownerName = 'Owner';
-        state.date = new Date().toISOString().split('T')[0];
+        state.date = getTodayInISTForInput();
         saveState();
         showDashboard();
         fetchSalonProfile();
@@ -437,12 +448,57 @@
         document.getElementById('dbOwnerName').textContent = state.ownerName;
     }
 
+    function markDeletedAccount(message) {
+        state.isOpen = false;
+        state.subscription = {
+            isActive: false,
+            label: 'Account Deleted',
+            customerMessage: message || 'Ye account delete ho chuka hai.',
+            ownerMessage: message || 'Ye account delete ho chuka hai.'
+        };
+        state.slots = [];
+        state.karigar = 0;
+        state.karigars = [];
+        state.salonName = 'Deleted Account';
+        state.ownerName = '—';
+        saveState();
+
+        const badge = document.getElementById('statusBadge');
+        if (badge) {
+            badge.textContent = 'Deleted';
+            badge.className = 'px-4 py-2 rounded-full text-sm font-bold bg-red-900/60 text-red-200 border border-red-500/40';
+        }
+
+        const closedState = document.getElementById('closedState');
+        if (closedState) {
+            closedState.classList.remove('hidden');
+            const title = closedState.querySelector('p.text-amber-200');
+            const text = closedState.querySelector('p.text-xs');
+            if (title) title.textContent = '🗑 Account Deleted';
+            if (text) text.textContent = message || 'Ye account permanently delete ho chuka hai. Naya registration karein.';
+        }
+
+        const openState = document.getElementById('openState');
+        if (openState) openState.classList.add('hidden');
+        const openForm = document.getElementById('openForm');
+        if (openForm) openForm.classList.add('hidden');
+        const slotsSection = document.getElementById('slotsSection');
+        if (slotsSection) slotsSection.classList.add('hidden');
+
+        document.getElementById('dbSalonName').textContent = state.salonName;
+        document.getElementById('dbOwnerName').textContent = state.ownerName;
+        alert(message || 'Ye account delete ho chuka hai. Dashboard controls lock kar diye gaye hain.');
+    }
+
     function fetchSalonProfile() {
         if (!state.salonId) return;
         fetch(`/api/salon-profile/${state.salonId}`)
         .then(r => r.json())
         .then(data => {
-            if (!data.success || !data.salon) return;
+            if (!data.success || !data.salon) {
+                markDeletedAccount(data.msg || 'Ye account delete ho chuka hai.');
+                return;
+            }
             state.salonName = data.salon.salonName || state.salonName;
             state.ownerName = data.salon.ownerName || state.ownerName;
             state.subscription = data.salon.subscription || null;
@@ -649,6 +705,10 @@
         fetch(`/api/booking-state/${state.salonId}`)
         .then(r => r.json())
         .then(data => {
+            if (data && data.success === false && /not found|delete|missing/i.test(String(data.msg || ''))) {
+                markDeletedAccount(data.msg || 'Ye account delete ho chuka hai.');
+                return;
+            }
             if (data.success) {
                 state.subscription = data.subscription || state.subscription;
                 state.isOpen   = data.isOpen;
@@ -783,12 +843,13 @@
                 ? slot.bookings.map(b => {
                     const raw = String(b.phone || '').replace(/\D/g, '');
                     const ph = raw.length >= 10 ? raw.slice(-10) : raw;
-                    const displayPhone = ph ? `+91 ${ph.slice(0, 5)} ${ph.slice(5)}` : '—';
+                    const displayPhone = ph ? `+91 ${ph}` : '—';
                     const waHref = ph ? `https://wa.me/91${ph}` : '#';
                     const safeName = String(b.name || '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
                     return `<div class="mt-1 pt-1 border-t border-white/20 text-left">
                         <p class="text-xs font-semibold truncate">👤 ${safeName}</p>
-                        <a href="${waHref}" target="_blank" rel="noopener noreferrer" class="text-xs text-green-300 hover:underline">💬 ${displayPhone}</a>
+                        <p class="text-xs font-bold text-cyan-100">📱 ${displayPhone}</p>
+                        <a href="${waHref}" target="_blank" rel="noopener noreferrer" class="text-xs text-green-300 hover:underline">💬 WhatsApp Chat</a>
                     </div>`;
                 }).join('')
                 : '';
