@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BookMySalon - Booking</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="bg-gray-900 text-white">
@@ -64,10 +65,8 @@
             <div>
                 <h3 class="text-2xl font-bold mb-6">Select Time Slot</h3>
                 
-                <!-- Date Selection -->
-                <div class="mb-8">
-                    <label class="block text-sm font-semibold mb-3">Choose Date</label>
-                    <input type="date" id="bookingDate" class="w-full bg-white text-gray-900 rounded-lg p-3 font-semibold" />
+                <div class="mb-8 rounded-xl bg-pink-50 border border-pink-100 p-4 text-sm text-pink-700 font-semibold">
+                    Aaj ki booking hi available hai.
                 </div>
 
                 <div class="mb-8">
@@ -95,7 +94,7 @@
                 </div>
                 <div class="flex justify-between">
                     <span class="text-gray-600">Date:</span>
-                    <span id="summaryDate" class="font-semibold">Not selected</span>
+                    <span id="summaryDate" class="font-semibold">Today</span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-gray-600">Time:</span>
@@ -155,6 +154,14 @@
                 </button>
                 <p id="reviewMsg" class="text-center text-sm text-green-600 hidden">✅ Review submit ho gaya! Shukriya.</p>
             </div>
+            <a id="confirmWaLink" href="#" target="_blank" rel="noopener noreferrer"
+               class="flex items-center justify-center gap-2 w-full bg-green-50 border border-green-200 text-green-700 font-bold py-3 px-4 rounded-xl mb-3 hover:bg-green-100 transition text-sm">
+                💬 Salon ko WhatsApp karein (booking details ke saath)
+            </a>
+            <div id="confirmQrWrapper" class="hidden text-center mb-3">
+                <p class="text-xs text-gray-500 mb-2">📲 Booking page QR — scan karke dobara book karein</p>
+                <canvas id="confirmQrCanvas" class="mx-auto rounded-lg border border-gray-200"></canvas>
+            </div>
             <button onclick="closeConfirmCard()"
                 class="w-full border border-gray-300 text-gray-600 font-semibold py-3 rounded-xl hover:bg-gray-50 transition mt-3">
                 🔄 Aur Booking Karein / Band Karo
@@ -170,7 +177,59 @@
         var currentSalonName = 'Salon';
         var currentBusinessType = 'salon';
         var currentBusinessLabel = 'Salon';
-        var currentDate = new Date().toISOString().split('T')[0];
+        function getDatePartsInTimezone(timeZone, dateObj) {
+            var parts = new Intl.DateTimeFormat('en-CA', {
+                timeZone: timeZone,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).formatToParts(dateObj || new Date());
+            function get(type) {
+                var found = parts.find(function(item) { return item.type === type; });
+                return found ? found.value : '';
+            }
+            return {
+                year: get('year'),
+                month: get('month'),
+                day: get('day'),
+                hour: get('hour'),
+                minute: get('minute')
+            };
+        }
+
+        function getTodayInIST() {
+            var p = getDatePartsInTimezone('Asia/Kolkata', new Date());
+            return p.year + '-' + p.month + '-' + p.day;
+        }
+
+        function getNowMinutesInIST() {
+            var p = getDatePartsInTimezone('Asia/Kolkata', new Date());
+            var hh = parseInt(p.hour, 10);
+            var mm = parseInt(p.minute, 10);
+            return (Number.isFinite(hh) ? hh : 0) * 60 + (Number.isFinite(mm) ? mm : 0);
+        }
+
+        function formatDisplayDate(dateText) {
+            var parts = String(dateText || '').split('-');
+            if (parts.length !== 3) return 'Today';
+            var dt = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+            return dt.toLocaleDateString('en-IN', {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'short'
+            });
+        }
+
+        function syncTodaySummaryDate() {
+            if (typeof selectedDate !== 'undefined') selectedDate = currentDate;
+            var summaryDateEl = document.getElementById('summaryDate');
+            if (summaryDateEl) summaryDateEl.textContent = formatDisplayDate(currentDate);
+        }
+
+        var currentDate = getTodayInIST();
         var currentSubscriptionActive = true;
         var selectedStars = 0;
         var lastBookedPhone = '';
@@ -199,11 +258,40 @@
             return m ? (h + ' hr ' + m + ' min') : (h + ' hr');
         }
 
+        function inferDurationMinByService(name) {
+            var text = String(name || '').toLowerCase();
+            if (!text) return 30;
+            if (text.includes('bridal')) return 120;
+            if (text.includes('party') && text.includes('makeup')) return 75;
+            if (text.includes('engagement') && text.includes('makeup')) return 90;
+            if (text.includes('hair smoothening')) return 120;
+            if (text.includes('hair color')) return 90;
+            if (text.includes('hair spa')) return 45;
+            if (text.includes('facial')) return 60;
+            if (text.includes('cleanup')) return 45;
+            if (text.includes('manicure')) return 45;
+            if (text.includes('pedicure')) return 60;
+            if (text.includes('waxing')) return 60;
+            return 30;
+        }
+
         function normalizeServiceItem(item) {
-            if (typeof item === 'string') return { name: item, durationMin: 30 };
+            if (typeof item === 'string') {
+                return { name: item, durationMin: inferDurationMinByService(item) };
+            }
+            var name = String(item && item.name ? item.name : '').trim();
+            var inferredDuration = inferDurationMinByService(name);
+            var parsedDuration = parseInt(item && item.durationMin, 10);
+            var normalizedDuration = Number.isFinite(parsedDuration) && parsedDuration > 0
+                ? Math.max(5, Math.min(240, parsedDuration))
+                : inferredDuration;
+            // Legacy records had fixed 30 min duration for all services.
+            if (normalizedDuration <= 30 && inferredDuration > normalizedDuration) {
+                normalizedDuration = inferredDuration;
+            }
             return {
-                name: String(item && item.name ? item.name : '').trim(),
-                durationMin: Math.max(5, Math.min(240, parseInt(item && item.durationMin, 10) || 30))
+                name: name,
+                durationMin: normalizedDuration
             };
         }
 
@@ -229,7 +317,14 @@
 
         window.toggleServiceCard = function(element) {
             var name = element.getAttribute('data-service') || '';
-            var durationMin = Math.max(5, Math.min(240, parseInt(element.getAttribute('data-duration') || '30', 10) || 30));
+            var fromCard = parseInt(element.getAttribute('data-duration') || '', 10);
+            var inferred = inferDurationMinByService(name);
+            var durationMin = Number.isFinite(fromCard) && fromCard > 0
+                ? Math.max(5, Math.min(240, fromCard))
+                : inferred;
+            if (durationMin <= 30 && inferred > durationMin) {
+                durationMin = inferred;
+            }
             var existingIndex = selectedServices.findIndex(function(item) { return item.name === name; });
             if (existingIndex >= 0) {
                 selectedServices.splice(existingIndex, 1);
@@ -294,6 +389,8 @@
             var salonIdEl = document.getElementById('salonId');
             if (salonIdEl) salonIdEl.textContent = SALON_ID;
         }
+
+        syncTodaySummaryDate();
 
         function renderSubscriptionNotice(subscription) {
             var notice = document.getElementById('subscriptionNotice');
@@ -382,10 +479,7 @@
             if (!karigars.length) return [];
 
             var bookings = Array.isArray(state.bookings) ? state.bookings : [];
-            var chosenDate = (document.getElementById('bookingDate') || {}).value || currentDate;
-            var today = new Date().toISOString().split('T')[0];
-            var now = new Date();
-            var nowMin = now.getHours() * 60 + now.getMinutes();
+            var nowMin = getNowMinutesInIST();
             var step = 5;
 
             var timeline = [];
@@ -407,7 +501,7 @@
                 }).filter(Boolean);
 
                 for (var startMin = openMin; startMin + durationMin <= closeMin; startMin += step) {
-                    if (chosenDate === today && startMin <= nowMin) continue;
+                    if (startMin <= nowMin) continue;
                     var candidate = { startMin: startMin, endMin: startMin + durationMin + bufferMin };
                     var hasConflict = karigarBookings.some(function(existing) { return slotOverlaps(candidate, existing); });
                     if (hasConflict) continue;
@@ -508,9 +602,12 @@
             var msg = document.getElementById('confirmMsg');
             var calBtn = document.getElementById('calendarBtn');
             if (msg) msg.textContent = customerName + ' - ' + slotLabel + ' slot confirm ho gaya.';
-            if (calBtn) calBtn.href = buildCalendarUrl(currentSalonName, currentDate, startTime, endTime);
+            var calUrl = buildCalendarUrl(currentSalonName, currentDate, startTime, endTime);
+            if (calBtn) calBtn.href = calUrl;
+            // Auto-open Google Calendar in new tab (browser allows this since it's in user-click chain)
+            try { window.open(calUrl, '_blank', 'noopener,noreferrer'); } catch(e) {}
             selectedStars = 0;
-            document.querySelectorAll('.star-btn').forEach(function(s) { s.textContent = '?'; });
+            document.querySelectorAll('.star-btn').forEach(function(s) { s.textContent = '☆'; });
             var rm = document.getElementById('reviewMsg');
             var rb = document.getElementById('reviewBtn');
             var rc = document.getElementById('reviewComment');
@@ -519,6 +616,28 @@
             if (rb) { rb.disabled = false; rb.textContent = 'Rating Submit Karen'; rb.style.display = ''; }
             if (rc) rc.value = '';
             if (rs) rs.style.display = '';
+            // WhatsApp link for customer to message salon with booking details
+            var waLinkEl = document.getElementById('confirmWaLink');
+            var waEl = document.getElementById('salonWhatsApp');
+            if (waLinkEl) {
+                var baseWaHref = (waEl && waEl.href && waEl.href !== '#' && waEl.href !== window.location.href) ? waEl.href.split('?')[0] : '';
+                var confirmText = 'Hi, meri booking confirm ho gayi:\nService: ' + (selectedServices.map(function(i){return i.name;}).join(', ') || slotLabel) + '\nSlot: ' + slotLabel + '\nNaam: ' + customerName;
+                if (baseWaHref) {
+                    waLinkEl.href = baseWaHref + '?text=' + encodeURIComponent(confirmText);
+                    waLinkEl.style.display = '';
+                } else {
+                    waLinkEl.style.display = 'none';
+                }
+            }
+            // QR code of this salon's booking page
+            var qrWrapper = document.getElementById('confirmQrWrapper');
+            var qrCanvas = document.getElementById('confirmQrCanvas');
+            if (qrWrapper && qrCanvas && SALON_ID && typeof QRCode !== 'undefined') {
+                var bookingUrl = window.location.origin + '/salon.html?id=' + SALON_ID;
+                QRCode.toCanvas(qrCanvas, bookingUrl, { width: 140, margin: 1 }, function(err) {
+                    if (!err) { qrWrapper.classList.remove('hidden'); }
+                });
+            }
             if (card) card.classList.remove('hidden');
         }
 
