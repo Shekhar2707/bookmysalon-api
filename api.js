@@ -268,14 +268,15 @@ function getManualSubscriptionCount() {
 }
 
 function getSalonSubscriptionSnapshot(salon) {
+  const typeLabel = String(salon?.businessType || 'salon').toLowerCase() === 'beauty_parlour' ? 'Beauty Parlour' : 'Salon';
   if (!salon) {
     return {
       isActive: false,
       status: 'missing',
-      label: 'Salon Not Found',
+      label: `${typeLabel} Not Found`,
       mode: 'missing',
-      customerMessage: 'Salon profile nahi mila.',
-      ownerMessage: 'Salon profile nahi mila.'
+      customerMessage: `${typeLabel} profile nahi mila.`,
+      ownerMessage: `${typeLabel} profile nahi mila.`
     };
   }
 
@@ -298,7 +299,7 @@ function getSalonSubscriptionSnapshot(salon) {
       trialEndsAt,
       activeUntil,
       manualSlotsLeft,
-      customerMessage: 'Salon subscription active hai. Booking available hai.',
+      customerMessage: `${typeLabel} subscription active hai. Booking available hai.`,
       ownerMessage: `Subscription active hai. Valid till ${new Date(activeUntil).toLocaleDateString('en-IN')}.`
     };
   }
@@ -314,7 +315,7 @@ function getSalonSubscriptionSnapshot(salon) {
       trialEndsAt,
       activeUntil: null,
       manualSlotsLeft,
-      customerMessage: `Salon abhi ${daysLeft} din ke free trial par hai. Booking available hai.`,
+      customerMessage: `${typeLabel} abhi ${daysLeft} din ke free trial par hai. Booking available hai.`,
       ownerMessage: `Aapka 7 din ka free trial chal raha hai. ${daysLeft} din bache hain.`
     };
   }
@@ -328,7 +329,7 @@ function getSalonSubscriptionSnapshot(salon) {
     trialEndsAt,
     activeUntil,
     manualSlotsLeft,
-    customerMessage: 'Salon subscription inactive hai. Booking temporarily unavailable hai. Owner ko subscription renew karne bolein.',
+    customerMessage: `${typeLabel} subscription inactive hai. Booking temporarily unavailable hai. Owner ko subscription renew karne bolein.`,
     ownerMessage: 'Aapka 7 din ka free trial khatam ho chuka hai. Subscription activate karaiye.'
   };
 }
@@ -389,18 +390,43 @@ function minutesToTimeString(totalMinutes) {
   return `${hh}:${mm}`;
 }
 
+function inferServiceDurationMinutes(serviceName) {
+  const text = String(serviceName || '').trim().toLowerCase();
+  if (!text) return DEFAULT_SERVICE_DURATION_MIN;
+  if (text.includes('bridal')) return 120;
+  if (text.includes('party') && text.includes('makeup')) return 75;
+  if (text.includes('engagement') && text.includes('makeup')) return 90;
+  if (text.includes('hair smoothening')) return 120;
+  if (text.includes('hair color')) return 90;
+  if (text.includes('hair spa')) return 45;
+  if (text.includes('facial')) return 60;
+  if (text.includes('cleanup')) return 45;
+  if (text.includes('manicure')) return 45;
+  if (text.includes('pedicure')) return 60;
+  if (text.includes('waxing')) return 60;
+  return DEFAULT_SERVICE_DURATION_MIN;
+}
+
 function normalizeServiceList(services) {
   if (!Array.isArray(services)) return [];
   const out = [];
   for (const item of services) {
     if (typeof item === 'string') {
       const name = item.trim();
-      if (name) out.push({ name, durationMin: DEFAULT_SERVICE_DURATION_MIN });
+      if (name) out.push({ name, durationMin: inferServiceDurationMinutes(name) });
       continue;
     }
     const name = String(item?.name || '').trim();
     if (!name) continue;
-    const durationMin = Math.max(5, Math.min(240, parseInt(item?.durationMin, 10) || DEFAULT_SERVICE_DURATION_MIN));
+    const inferredDuration = inferServiceDurationMinutes(name);
+    const parsedDuration = parseInt(item?.durationMin, 10);
+    let durationMin = Number.isFinite(parsedDuration) && parsedDuration > 0
+      ? Math.max(5, Math.min(240, parsedDuration))
+      : inferredDuration;
+    // Legacy data may have flat 30 minutes for all services; upgrade known long services.
+    if (durationMin <= 30 && inferredDuration > durationMin) {
+      durationMin = inferredDuration;
+    }
     out.push({ name, durationMin });
   }
   return out;
@@ -607,6 +633,17 @@ function cleanupDemoRecords(options = {}) {
   const deletedSalonIds = Object.values(salonRegistry)
     .filter(shouldDeleteSalon)
     .map((salon) => salon.salonId);
+
+  return deleteSalonRecords(deletedSalonIds);
+}
+
+function deleteSalonRecords(salonIds) {
+  const normalizedIds = Array.from(new Set(
+    (Array.isArray(salonIds) ? salonIds : [])
+      .map((id) => String(id || '').trim().toUpperCase())
+      .filter(Boolean)
+  ));
+  const deletedSalonIds = normalizedIds.filter((id) => Boolean(salonRegistry[id]));
 
   if (!deletedSalonIds.length) {
     return { deletedSalonIds: [], deletedCustomerKeys: [], deletedReviewSalonIds: [] };
@@ -1572,6 +1609,28 @@ app.post('/api/admin/salon-location/update', requireAdminKey, (req, res) => {
     success: true,
     msg: 'Salon location updated successfully',
     salon: buildPublicSalonData(salon)
+  });
+});
+
+app.post('/api/admin/salon/delete', requireAdminKey, (req, res) => {
+  const salonId = String(req.body?.salonId || '').trim().toUpperCase();
+  if (!salonId) {
+    return res.json({ success: false, msg: 'Salon ID required' });
+  }
+  if (!salonRegistry[salonId]) {
+    return res.json({ success: false, msg: 'Salon not found' });
+  }
+
+  const result = deleteSalonRecords([salonId]);
+  if (!result.deletedSalonIds.length) {
+    return res.json({ success: false, msg: 'Salon delete failed' });
+  }
+
+  return res.json({
+    success: true,
+    msg: `Salon ${salonId} deleted successfully.`,
+    dataNamespace: DATA_NAMESPACE || 'default',
+    ...result
   });
 });
 

@@ -4,13 +4,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BookMySalon - Booking</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js"></script>
     <link rel="stylesheet" href="style.css">
+    <style>
+        :root {
+            --bms-card: rgba(255, 255, 255, 0.9);
+            --bms-border: rgba(255, 255, 255, 0.35);
+        }
+        body { font-family: 'Manrope', sans-serif; }
+        .premium-bg {
+            background:
+                radial-gradient(circle at 10% 0%, rgba(255, 143, 185, 0.35), transparent 35%),
+                radial-gradient(circle at 85% 10%, rgba(56, 189, 248, 0.28), transparent 36%),
+                linear-gradient(180deg, #0b1220 0%, #111827 55%, #0a0f1c 100%);
+        }
+        .glass-card {
+            background: var(--bms-card);
+            border: 1px solid var(--bms-border);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 24px 70px rgba(2, 6, 23, 0.22);
+        }
+    </style>
 </head>
-<body class="bg-gray-900 text-white">
+<body class="premium-bg text-white min-h-screen">
     <!-- Header -->
-    <header class="bg-gray-800 shadow-lg">
+    <header class="bg-slate-900/70 shadow-lg backdrop-blur border-b border-white/10 sticky top-0 z-40">
         <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
             <button onclick="window.history.back()" class="text-2xl hover:text-pink-400 transition">
                 ← Back
@@ -22,7 +44,7 @@
 
     <main class="max-w-6xl mx-auto px-4 py-8">
         <!-- Salon Info -->
-        <div class="bg-white rounded-2xl shadow-lg p-8 text-gray-900 mb-8">
+        <div class="glass-card rounded-3xl p-8 text-gray-900 mb-8">
             <div class="flex justify-between items-start mb-6">
                 <div>
                     <h2 id="salonName" class="text-3xl font-bold">Salon Name</h2>
@@ -44,7 +66,7 @@
                 <div>
                     <p class="text-gray-600">📞 WhatsApp</p>
                     <p id="salonPhone" class="font-semibold text-gray-500">—</p>
-                    <a id="salonWhatsApp" href="#" target="_blank" rel="noopener noreferrer" class="text-green-600 text-sm font-semibold hover:underline hidden">💬 Message Salon</a>
+                    <a id="salonWhatsApp" href="#" target="_blank" rel="noopener noreferrer" class="text-green-600 text-sm font-semibold hover:underline hidden">💬 Message Business</a>
                 </div>
                 <div>
                     <p class="text-gray-600">⏰ Hours</p>
@@ -85,7 +107,7 @@
         </div>
 
         <!-- Booking Summary -->
-        <div class="bg-white rounded-2xl shadow-lg p-8 text-gray-900 mt-8">
+        <div class="glass-card rounded-3xl p-8 text-gray-900 mt-8">
             <h3 class="text-2xl font-bold mb-6">Booking Summary</h3>
             <div class="space-y-4 mb-6 pb-6 border-b border-gray-300">
                 <div class="flex justify-between">
@@ -138,7 +160,7 @@
                 📅 Google Calendar mein Add karo (15 min reminder)
             </a>
             <div id="ratingSection">
-                <p class="text-center font-semibold text-gray-700 mb-3">⭐ Salon ko rate karein:</p>
+                <p id="ratingHeading" class="text-center font-semibold text-gray-700 mb-3">⭐ Rate karein:</p>
                 <div id="starButtons" class="flex justify-center gap-3 mb-3 text-3xl select-none">
                     <span class="cursor-pointer star-btn" data-stars="1">☆</span>
                     <span class="cursor-pointer star-btn" data-stars="2">☆</span>
@@ -156,7 +178,7 @@
             </div>
             <a id="confirmWaLink" href="#" target="_blank" rel="noopener noreferrer"
                class="flex items-center justify-center gap-2 w-full bg-green-50 border border-green-200 text-green-700 font-bold py-3 px-4 rounded-xl mb-3 hover:bg-green-100 transition text-sm">
-                💬 Salon ko WhatsApp karein (booking details ke saath)
+                💬 WhatsApp karein (booking details ke saath)
             </a>
             <div id="confirmQrWrapper" class="hidden text-center mb-3">
                 <p class="text-xs text-gray-500 mb-2">📲 Booking page QR — scan karke dobara book karein</p>
@@ -174,6 +196,8 @@
     (function() {
         var params = new URLSearchParams(window.location.search);
         var SALON_ID = (params.get('id') || '').toUpperCase();
+        var DEFAULT_BOOKING_WHATSAPP = '919209098349';
+        var isSalonFallbackResolving = false;
         var currentSalonName = 'Salon';
         var currentBusinessType = 'salon';
         var currentBusinessLabel = 'Salon';
@@ -227,6 +251,31 @@
             if (typeof selectedDate !== 'undefined') selectedDate = currentDate;
             var summaryDateEl = document.getElementById('summaryDate');
             if (summaryDateEl) summaryDateEl.textContent = formatDisplayDate(currentDate);
+        }
+
+        function resolveFallbackSalonId() {
+            if (isSalonFallbackResolving) return Promise.resolve(null);
+            isSalonFallbackResolving = true;
+            return fetch('/api/nearby-salons?activeOnly=true&limit=1')
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    var firstSalon = Array.isArray(d && d.salons) ? d.salons[0] : null;
+                    var fallbackId = firstSalon && firstSalon.salonId ? String(firstSalon.salonId).toUpperCase() : '';
+                    if (!fallbackId) return null;
+                    if (SALON_ID !== fallbackId) {
+                        SALON_ID = fallbackId;
+                        var salonIdEl = document.getElementById('salonId');
+                        if (salonIdEl) salonIdEl.textContent = fallbackId;
+                        try {
+                            var nextUrl = new URL(window.location.href);
+                            nextUrl.searchParams.set('id', fallbackId);
+                            window.history.replaceState({}, '', nextUrl.toString());
+                        } catch (e) {}
+                    }
+                    return fallbackId;
+                })
+                .catch(function() { return null; })
+                .finally(function() { isSalonFallbackResolving = false; });
         }
 
         var currentDate = getTodayInIST();
@@ -417,16 +466,39 @@
         }
 
         function fetchSalonProfile() {
-            if (!SALON_ID) return;
+            if (!SALON_ID) {
+                resolveFallbackSalonId().then(function(id) {
+                    if (id) fetchSalonProfile();
+                });
+                return;
+            }
             fetch('/api/salon-profile/' + SALON_ID)
                 .then(function(r) { return r.json(); })
                 .then(function(d) {
-                    if (!d.success || !d.salon) return;
+                    if (!d.success || !d.salon) {
+                        currentSubscriptionActive = false;
+                        showBanner('Ye salon account delete ho chuka hai ya available nahi hai. Naya QR/ID use karein.', 'error');
+                        var nameEl = document.getElementById('salonName');
+                        if (nameEl) nameEl.textContent = 'Salon unavailable';
+                        var phoneEl = document.getElementById('salonPhone');
+                        if (phoneEl) phoneEl.textContent = '—';
+                        var waEl = document.getElementById('salonWhatsApp');
+                        if (waEl) waEl.classList.add('hidden');
+                        var container = document.getElementById('timeSlotsContainer');
+                        if (container) {
+                            container.innerHTML = '<div class="col-span-2 text-center text-red-500 py-8 text-sm">Ye account delete ho chuka hai. Booking allowed nahi hai.</div>';
+                        }
+                        return;
+                    }
                     var s = d.salon;
                     currentSalonName = s.salonName || 'Salon';
                     currentBusinessType = s.businessType === 'beauty_parlour' ? 'beauty_parlour' : 'salon';
                     currentBusinessLabel = s.businessLabel || (currentBusinessType === 'beauty_parlour' ? 'Beauty Parlour' : 'Salon');
                     document.title = 'BookMySalon - ' + currentBusinessLabel + ' Booking';
+                    var ratingHeadingEl = document.getElementById('ratingHeading');
+                    if (ratingHeadingEl) ratingHeadingEl.textContent = '⭐ ' + currentBusinessLabel + ' ko rate karein:';
+                    var confirmWaLinkEl = document.getElementById('confirmWaLink');
+                    if (confirmWaLinkEl) confirmWaLinkEl.textContent = '💬 ' + currentBusinessLabel + ' ko WhatsApp karein (booking details ke saath)';
                     var idLabelEl = document.getElementById('salonIdLabel');
                     if (idLabelEl) idLabelEl.textContent = currentBusinessLabel + ' ID';
                     var el = document.getElementById('salonName');
@@ -455,10 +527,27 @@
         }
 
         function loadSlots() {
-            if (!SALON_ID) { showBanner('Salon ID nahi mila. QR dubara scan karein.', 'error'); return; }
+            if (!SALON_ID) {
+                resolveFallbackSalonId().then(function(id) {
+                    if (id) loadSlots();
+                    else showBanner('Salon ID nahi mila. QR dubara scan karein.', 'error');
+                });
+                return;
+            }
             fetch('/api/booking-state/' + SALON_ID)
                 .then(function(r) { return r.json(); })
-                .then(function(data) { renderSlots(data); })
+                .then(function(data) {
+                    if (!data || data.success === false) {
+                        currentSubscriptionActive = false;
+                        showBanner((data && data.msg) || 'Booking state load nahi ho paya.', 'error');
+                        var container = document.getElementById('timeSlotsContainer');
+                        if (container) {
+                            container.innerHTML = '<div class="col-span-2 text-center text-red-500 py-8 text-sm">Ye account delete/unavailable hai. Booking band hai.</div>';
+                        }
+                        return;
+                    }
+                    renderSlots(data);
+                })
                 .catch(function() { showBanner('Network error. Please refresh.', 'error'); });
         }
 
@@ -536,6 +625,11 @@
         function renderSlots(state) {
             var container = document.getElementById('timeSlotsContainer');
             if (!container) return;
+            if (!state || typeof state !== 'object') {
+                showBanner('Booking state invalid hai. Refresh karein.', 'error');
+                container.innerHTML = '<div class="col-span-2 text-center text-red-500 py-8 text-sm">Booking state load nahi hui.</div>';
+                return;
+            }
             currentSlotState = state;
             renderSubscriptionNotice(state.subscription);
             renderKarigarFilter(state.karigars || []);
@@ -662,7 +756,7 @@
             if (e.target.classList.contains('star-btn')) {
                 selectedStars = parseInt(e.target.getAttribute('data-stars'));
                 document.querySelectorAll('.star-btn').forEach(function(s) {
-                    s.textContent = parseInt(s.getAttribute('data-stars')) <= selectedStars ? '?' : '?';
+                    s.textContent = parseInt(s.getAttribute('data-stars')) <= selectedStars ? '★' : '☆';
                 });
             }
         });
@@ -698,7 +792,7 @@
                     if (!d.success) return;
                     var rd = document.getElementById('salonRatingDisplay');
                     var rc = document.getElementById('salonReviewCount');
-                    if (d.avgRating && rd) { rd.textContent = '? ' + d.avgRating; rd.classList.remove('hidden'); }
+                    if (d.avgRating && rd) { rd.textContent = '⭐ ' + d.avgRating; rd.classList.remove('hidden'); }
                     if (d.totalReviews > 0 && rc) { rc.textContent = '(' + d.totalReviews + ' reviews)'; rc.classList.remove('hidden'); }
                 }).catch(function() {});
         }
@@ -743,10 +837,15 @@
 
         function getSalonWhatsAppBaseHref() {
             var waEl = document.getElementById('salonWhatsApp');
-            if (!waEl || !waEl.href || waEl.href === '#' || waEl.href === window.location.href) {
-                return '';
+            if (waEl && waEl.href && waEl.href !== '#' && waEl.href !== window.location.href) {
+                return waEl.href.split('?')[0];
             }
-            return waEl.href.split('?')[0];
+            var phoneEl = document.getElementById('salonPhone');
+            var phoneDigits = String((phoneEl && phoneEl.textContent) || '').replace(/\D/g, '').slice(-10);
+            if (phoneDigits.length === 10) {
+                return 'https://wa.me/91' + phoneDigits;
+            }
+            return 'https://wa.me/' + DEFAULT_BOOKING_WHATSAPP;
         }
 
         window.confirmBooking = function() {
@@ -786,9 +885,6 @@
             if (!/^[6-9]\d{9}$/.test(rawPhone)) { alert('Valid 10-digit WhatsApp number bharen.'); return; }
             if (!SALON_ID) { alert('Salon ID nahi mila. QR dubara scan karein.'); return; }
 
-            var waBaseHref = getSalonWhatsAppBaseHref();
-            if (!waBaseHref) { alert('Salon ka WhatsApp number abhi available nahi hai.'); return; }
-
             var btn = document.querySelector('[onclick="bookViaWhatsApp()"]');
             if (btn) { btn.disabled = true; btn.textContent = 'Booking + WhatsApp bhej rahe hain...'; }
 
@@ -814,6 +910,7 @@
                 showConfirmCard(customerName, rawPhone, slotLabel, selectedSlot.startTime, selectedSlot.endTime, { autoOpenCalendar: false });
                 setTimeout(loadSlots, 1200);
 
+                var waBaseHref = getSalonWhatsAppBaseHref();
                 window.open(waBaseHref + '?text=' + encodeURIComponent(message), '_blank', 'noopener,noreferrer');
             })
             .catch(function(error) {
@@ -829,7 +926,11 @@
             fetchReviews();
             loadSlots();
         } else {
-            showBanner('Salon ID nahi mila. QR code dubara scan karein.', 'error');
+            resolveFallbackSalonId().then(function() {
+                fetchSalonProfile();
+                fetchReviews();
+                loadSlots();
+            });
         }
     })();
     </script>
