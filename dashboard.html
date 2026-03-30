@@ -12,6 +12,7 @@
         .slot-partial{ background: #fef3c7; border: 2px solid #f59e0b; color: #78350f; }
         .slot-full   { background: #fecaca; border: 2px solid #ef4444; color: #7f1d1d; }
         .slot-closed { background: #f3f4f6; border: 2px dashed #9ca3af; color: #6b7280; }
+        .slot-booking-card { background: rgba(255,255,255,0.82); border: 1px solid rgba(15,23,42,0.08); color: #0f172a; }
         .pulse-green { animation: pulse 2s infinite; }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
     </style>
@@ -849,10 +850,10 @@
                     const displayPhone = ph ? `+91 ${ph}` : '—';
                     const waHref = ph ? `https://wa.me/91${ph}` : '#';
                     const safeName = String(b.name || '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
-                    return `<div class="mt-1 pt-1 border-t border-white/20 text-left">
-                        <p class="text-xs font-semibold">👤 ${safeName}</p>
-                        <p class="text-xs font-bold text-cyan-100">📱 ${displayPhone}</p>
-                        <a href="${waHref}" target="_blank" rel="noopener noreferrer" class="text-xs text-green-300 hover:underline">💬 WhatsApp Chat</a>
+                    return `<div class="slot-booking-card mt-2 rounded-lg px-2 py-2 text-left shadow-sm">
+                        <p class="text-xs font-extrabold leading-tight">👤 ${safeName}</p>
+                        <p class="mt-1 text-xs font-bold leading-tight text-slate-800">📱 ${displayPhone}</p>
+                        <a href="${waHref}" target="_blank" rel="noopener noreferrer" class="mt-1 inline-block text-xs font-bold text-emerald-700 hover:underline">💬 WhatsApp Chat</a>
                     </div>`;
                 }).join('')
                 : '';
