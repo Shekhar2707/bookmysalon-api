@@ -944,7 +944,8 @@ function shareQRCode() {
         leadVerified: false,
         leadExpiresAt: '',
         leadVerifiedAt: '',
-        verifyPollId: null
+        verifyPollId: null,
+        chatVersion: 0
     };
     const legacyLeadSessionKey = 'bms_ai_lead_session';
     const leadSessionKey = 'bms_ai_lead_session_v2';
@@ -971,7 +972,9 @@ function shareQRCode() {
         .bms-ai-panel.open { display: flex; flex-direction: column; }
         .bms-ai-head { padding: 10px 12px; background: linear-gradient(135deg, #0ea5e9, #2563eb); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         .bms-ai-title { font-size: 14px; font-weight: 800; }
+        .bms-ai-head-actions { display: flex; align-items: center; gap: 6px; }
         .bms-ai-close { border: 0; border-radius: 8px; padding: 6px 8px; background: rgba(255,255,255,.18); color: #fff; font-weight: 700; }
+        .bms-ai-new-chat { border: 0; border-radius: 8px; padding: 6px 8px; background: rgba(255,255,255,.12); color: #fff; font-weight: 700; font-size: 12px; }
         .bms-ai-modes { padding: 10px 12px; display: flex; gap: 8px; border-bottom: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.02); }
         .bms-ai-mode { flex: 1; border: 1px solid rgba(255,255,255,.15); border-radius: 10px; background: transparent; color: #cbd5e1; padding: 8px; font-size: 12px; font-weight: 700; }
         .bms-ai-mode.active { color: #fff; border-color: #22d3ee; background: rgba(34,211,238,.14); }
@@ -1010,7 +1013,10 @@ function shareQRCode() {
     panel.innerHTML = `
         <div class="bms-ai-head">
             <div class="bms-ai-title" id="bmsAiTitle">बुकमायसैलून एआई सहायक</div>
-            <button type="button" class="bms-ai-close" id="bmsAiClose">Close</button>
+            <div class="bms-ai-head-actions">
+                <button type="button" class="bms-ai-new-chat" id="bmsAiNewChat">New Chat</button>
+                <button type="button" class="bms-ai-close" id="bmsAiClose">Close</button>
+            </div>
         </div>
         <div class="bms-ai-modes">
             <button type="button" class="bms-ai-mode" id="bmsOwnerMode">Owner Mode</button>
@@ -1043,6 +1049,7 @@ function shareQRCode() {
     const ownerBtn = panel.querySelector('#bmsOwnerMode');
     const customerBtn = panel.querySelector('#bmsCustomerMode');
     const closeBtn = panel.querySelector('#bmsAiClose');
+    const newChatBtn = panel.querySelector('#bmsAiNewChat');
     const langHindiBtn = panel.querySelector('#bmsLangHindi');
     const langEnglishBtn = panel.querySelector('#bmsLangEnglish');
     const faqEl = panel.querySelector('#bmsAiFaq');
@@ -1142,6 +1149,7 @@ function shareQRCode() {
         const isEnglish = state.language === 'english';
         fab.textContent = isEnglish ? 'AI Help' : 'एआई सहायता';
         if (titleEl) titleEl.textContent = isEnglish ? 'BookMySalon AI Assistant' : 'बुकमायसैलून एआई सहायक';
+        if (newChatBtn) newChatBtn.textContent = isEnglish ? 'New Chat' : 'नई चैट';
         closeBtn.textContent = isEnglish ? 'Close' : 'बंद';
         ownerBtn.textContent = isEnglish
             ? (pageIsBeauty ? 'Owner Mode' : 'Owner Mode')
@@ -1314,8 +1322,12 @@ function shareQRCode() {
     }
 
     function resetChatPanel() {
+        state.chatVersion += 1;
+        state.loading = false;
         bodyEl.innerHTML = '';
         state.history = [];
+        inputEl.value = '';
+        sendEl.disabled = false;
         if (state.verifyPollId) {
             clearInterval(state.verifyPollId);
             state.verifyPollId = null;
@@ -1358,6 +1370,7 @@ function shareQRCode() {
 
         const typingText = state.language === 'english' ? 'Thinking...' : 'सोच रहा हूँ...';
         pushMsg('assistant', typingText);
+        const chatVersion = state.chatVersion;
 
         try {
             const payload = {
@@ -1374,6 +1387,7 @@ function shareQRCode() {
                 body: JSON.stringify(payload)
             });
             const data = await res.json();
+            if (chatVersion !== state.chatVersion) return;
 
             const last = bodyEl.lastElementChild;
             if (last && last.textContent === typingText) last.remove();
@@ -1386,6 +1400,7 @@ function shareQRCode() {
                 state.history.push({ role: 'assistant', text: reply });
             }
         } catch (err) {
+            if (chatVersion !== state.chatVersion) return;
             const last = bodyEl.lastElementChild;
             if (last && last.textContent === typingText) last.remove();
             pushMsg('assistant', 'Network issue aaya. Internet/server check karke phir try karo.');
@@ -1405,6 +1420,11 @@ function shareQRCode() {
     closeBtn.addEventListener('click', () => {
         state.open = false;
         panel.classList.remove('open');
+    });
+
+    newChatBtn.addEventListener('click', () => {
+        resetChatPanel();
+        if (state.open) inputEl.focus();
     });
 
     leadSaveEl.addEventListener('click', () => {
